@@ -2,9 +2,16 @@
 extern crate log;
 
 use askama::Template;
-use bollard::{image::BuildImageOptions, Docker};
+use bollard::{
+	container::{self, LogsOptions},
+	image::BuildImageOptions,
+	models::{HostConfig, Mount, MountTypeEnum},
+	Docker
+};
 use serde::Deserialize;
 use std::{
+	collections::HashMap,
+	env::current_dir,
 	fs::File,
 	io::{Cursor, Read},
 	process::exit
@@ -129,5 +136,56 @@ async fn main() {
 			}
 		}
 		info!("Built docker image {}", img);
+
+		// create the container
+		let mut volumes: HashMap<String, HashMap<(), ()>> = HashMap::new();
+		volumes.insert("/repo".to_owned(), Default::default());
+		let mut mounts: Vec<Mount> = Vec::new();
+		mounts.push(Mount {
+			target: Some("/repo".to_string()),
+			source: Some(current_dir().unwrap().join("repo").to_string_lossy().to_string()),
+			typ: Some(MountTypeEnum::BIND),
+			read_only: Some(false),
+			..Default::default()
+		});
+		let container = docker
+			.create_container::<String, String>(None, container::Config {
+				attach_stdout: Some(true),
+				attach_stderr: Some(true),
+				image: Some(img.clone()),
+				volumes: Some(volumes),
+				host_config: Some(HostConfig {
+					mounts: Some(mounts),
+					..Default::default()
+				}),
+				..Default::default()
+			})
+			.await
+			.expect("Failed to create container");
+		info!("Created container {}", container.id);
+
+		// start the container
+		docker
+			.start_container::<String>(&container.id, None)
+			.await
+			.expect("Failed to start container");
+		info!("Started container {}", container.id);
+
+		// attach to the container logs
+		let mut logs = docker.logs::<String>(
+			&container.id,
+			Some(LogsOptions {
+				follow: true,
+				stdout: true,
+				stderr: true,
+				timestamps: true,
+				..Default::default()
+			})
+		);
+		while let Some(log) = logs.next().await {
+			let log = log.expect("Failed to attach to container");
+			print!("{}", log);
+		}
+		info!("Log stream finished");
 	}
 }
