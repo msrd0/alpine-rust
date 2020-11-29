@@ -94,14 +94,23 @@ steps:
     pull: always
     environment:
       CARGO_HOME: target/cargo
+      RUST_BACKTRACE: 1
+    commands:
+      - cargo -V
+      - cargo build
+  
+  - name: run
+    image: docker
+    pull: always
+    environment:
       DOCKER_HOST: "unix:///drone/docker.sock"
       RUST_BACKTRACE: 1
       RUST_LOG: debug
     commands:
-      - cargo -V
+      - docker -v
       - echo "$ABUILD_PUBKEY" >alpine@msrd0.de-5fc3c0b2.rsa.pub
       - echo "$ABUILD_PRIVKEY" >alpine@msrd0.de-5fc3c0b2.rsa
-      - cargo run
+      - ./target/debug/alpine-rust
   
   - name: rebuild-cache
     image: meltwater/drone-cache:v1
