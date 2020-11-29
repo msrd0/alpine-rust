@@ -11,7 +11,7 @@ RUN echo /repo/alpine/{{ alpine }}/rust >>/etc/apk/repositories
 COPY {{ pubkey }} /etc/apk/keys/
 
 # create build user
-RUN adduser alpine-rust \
+RUN adduser -D alpine-rust \
  	&& addgroup alpine-rust abuild \
 	&& echo "alpine-rust ALL=(ALL) NOPASSWD: ALL" >/etc/sudoers \
 	&& mkdir -p /var/cache/distfiles \
