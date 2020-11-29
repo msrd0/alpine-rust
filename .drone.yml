@@ -125,6 +125,9 @@ steps:
       - docker -v
       - ./target/debug/alpine-rust
       - docker ps -a
+    volumes:
+      - name: dockersock
+        path: /var/run
   
   - name: rebuild-cache
     image: meltwater/drone-cache:v1
@@ -142,19 +145,22 @@ steps:
 
 environment:
   DOCKER_DRIVER: overlay2
-  DOCKER_HOST: "unix:///drone/docker.sock"
-  DOCKER_TLS_CERTDIR: "/drone/docker-certs"
+  DOCKER_TLS_CERTDIR: "/var/run/docker-certs"
   RUST_BACKTRACE: 1
 
 services:
   - name: docker
     image: docker:dind
     priviledged: true
-    command: ['-H', 'unix:///drone/docker.sock']
+    volumes:
+      - name: dockersock
+        path: /var/run
 
 volumes:
   - name: cache
     host:
       path: /var/lib/cache
+  - name: dockersock
+    temp: {}
 
 ...
