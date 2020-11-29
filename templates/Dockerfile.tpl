@@ -12,16 +12,17 @@ COPY {{ pubkey }} /etc/apk/keys/
 
 # create build user
 RUN adduser -D alpine-rust \
- 	&& addgroup alpine-rust abuild \
-	&& echo "alpine-rust ALL=(ALL) NOPASSWD: ALL" >/etc/sudoers \
-	&& mkdir -p /var/cache/distfiles \
-	&& chgrp abuild /var/cache/distfiles \
-	&& chmod 775 /var/cache/distfiles
+ && addgroup alpine-rust abuild \
+ && echo "alpine-rust ALL=(ALL) NOPASSWD: ALL" >/etc/sudoers \
+ && mkdir -p /var/cache/distfiles \
+ && chgrp abuild /var/cache/distfiles \
+ && chmod 775 /var/cache/distfiles
 USER alpine-rust
 WORKDIR /home/alpine-rust
 RUN mkdir -p .abuild
 COPY {{ privkey }} .abuild/
-RUN echo "PACKAGER_PRIVKEY=\"/home/alpine-rust/.abuild/{{ privkey }}\"" >.abuild/abuild.conf
+RUN echo "PACKAGER_PRIVKEY=\"/home/alpine-rust/.abuild/{{ privkey }}\"" >.abuild/abuild.conf \
+ && echo "export JOBS={{ jobs }}" >>.abuild/abuild.conf
 
 # prepare the build directory
 RUN mkdir -p package

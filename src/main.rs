@@ -42,7 +42,8 @@ struct Config {
 struct Dockerfile<'a> {
 	alpine: &'a str,
 	pubkey: &'a str,
-	privkey: &'a str
+	privkey: &'a str,
+	jobs: usize
 }
 
 impl Config {
@@ -50,7 +51,8 @@ impl Config {
 		Dockerfile {
 			alpine: &self.alpine,
 			pubkey: &self.pubkey,
-			privkey: &self.privkey
+			privkey: &self.privkey,
+			jobs: num_cpus::get()
 		}
 	}
 }

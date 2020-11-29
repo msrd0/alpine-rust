@@ -16,6 +16,7 @@ dependencies = [
  "askama",
  "bollard",
  "log",
+ "num_cpus",
  "pretty_env_logger",
  "serde",
  "tar",
