@@ -112,7 +112,7 @@ steps:
       - echo "$$ABUILD_PRIVKEY" >alpine@msrd0.de-5fc3c0b2.rsa
   
   - name: run
-    image: docker:dind
+    image: docker
     pull: always
     environment:
       ABUILD_PUBKEY:
@@ -149,7 +149,7 @@ environment:
 services:
   - name: docker
     image: docker:dind
-    priviledged: true
+    privileged: true
     volumes:
       - name: dockersock
         path: /var/run
