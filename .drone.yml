@@ -94,11 +94,22 @@ steps:
     pull: always
     environment:
       CARGO_HOME: target/cargo
-      RUST_BACKTRACE: 1
     commands:
       - apk add --no-cache cargo rust
       - cargo -V
       - cargo build
+  
+  - name: secrets
+    image: busybox
+    pull: always
+    environment:
+      ABUILD_PUBKEY:
+        from_secret: ABUILD_PUBKEY
+      ABUILD_PRIVKEY:
+        from_secret: ABUILD_PRIVKEY
+    commands:
+      - echo "$$ABUILD_PUBKEY" >alpine@msrd0.de-5fc3c0b2.rsa.pub
+      - echo "$$ABUILD_PRIVKEY" >alpine@msrd0.de-5fc3c0b2.rsa
   
   - name: run
     image: docker
@@ -108,15 +119,12 @@ steps:
         from_secret: ABUILD_PUBKEY
       ABUILD_PRIVKEY:
         from_secret: ABUILD_PRIVKEY
-      DOCKER_HOST: "unix:///drone/docker.sock"
-      RUST_BACKTRACE: 1
       RUST_LOG: debug
     commands:
+      - apk add --no-cache libgcc
       - docker -v
-      - echo "$$ABUILD_PUBKEY" >alpine@msrd0.de-5fc3c0b2.rsa.pub
-      - echo "$$ABUILD_PRIVKEY" >alpine@msrd0.de-5fc3c0b2.rsa
-      - sha256sum alpine@msrd0.de-5fc3c0b2.rsa.pub alpine@msrd0.de-5fc3c0b2.rsa
       - ./target/debug/alpine-rust
+      - docker ps -a
   
   - name: rebuild-cache
     image: meltwater/drone-cache:v1
@@ -131,6 +139,12 @@ steps:
     volumes:
       - name: cache
         path: /tmp/cache
+
+environment:
+  DOCKER_DRIVER: overlay2
+  DOCKER_HOST: "unix:///drone/docker.sock"
+  DOCKER_TLS_CERTDIR: "/drone/docker-certs"
+  RUST_BACKTRACE: 1
 
 services:
   - name: docker
