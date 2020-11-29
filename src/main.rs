@@ -5,12 +5,10 @@ use askama::Template;
 use bollard::{image::BuildImageOptions, Docker};
 use serde::Deserialize;
 use std::{
-	fs::{self, File},
-	io::{self, Cursor, Read, Write},
+	fs::File,
+	io::{Cursor, Read},
 	process::exit
 };
-use tar::Archive;
-use tempfile::tempdir;
 use tokio::stream::StreamExt;
 
 #[derive(Deserialize, Template)]
@@ -20,7 +18,8 @@ struct APKBUILD {
 	pkgver: String,
 	bootver: String,
 	bootsys: bool,
-	aportsha: String
+	aportsha: String,
+	sha512sums: String
 }
 
 #[derive(Deserialize)]
@@ -52,7 +51,7 @@ impl Config {
 fn tar_header(path: &str, len: usize) -> tar::Header {
 	let mut header = tar::Header::new_old();
 	header.set_path(path).unwrap();
-	header.set_mode(0644);
+	header.set_mode(0o644);
 	header.set_uid(0);
 	header.set_gid(0);
 	header.set_size(len as u64);

@@ -309,5 +309,5 @@ _mv() {
 	mv "$@"
 }
 
-# The SHA512 checksums will be updated by running `abuild checksum`
-sha512sums=""
+# The SHA512 checksums can be updated by running `abuild checksum`
+sha512sums="{{ sha512sums }}"

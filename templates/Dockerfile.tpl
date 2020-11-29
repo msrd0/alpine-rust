@@ -22,3 +22,11 @@ WORKDIR /home/alpine-rust
 RUN mkdir -p .abuild
 COPY {{ privkey }} .abuild/
 RUN echo "PACKAGER_PRIVKEY=\"/home/alpine-rust/.abuild/{{ privkey }}\"" >.abuild/abuild.conf
+
+# prepare the build directory
+RUN mkdir -p package
+WORKDIR /home/alpine-rust/package
+COPY APKBUILD ./
+
+# the command to build is pretty straight-forward
+CMD ["/bin/ash", "-c", "sudo apk update && abuild -r"]
