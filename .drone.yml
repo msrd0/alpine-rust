@@ -112,7 +112,7 @@ steps:
       - echo "$$ABUILD_PRIVKEY" >alpine@msrd0.de-5fc3c0b2.rsa
   
   - name: run
-    image: docker
+    image: docker:dind
     pull: always
     environment:
       ABUILD_PUBKEY:
@@ -144,8 +144,6 @@ steps:
         path: /tmp/cache
 
 environment:
-  DOCKER_DRIVER: overlay2
-  DOCKER_TLS_CERTDIR: "/var/run/docker-certs"
   RUST_BACKTRACE: 1
 
 services:
