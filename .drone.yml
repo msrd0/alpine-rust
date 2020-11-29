@@ -104,14 +104,19 @@ steps:
     image: docker
     pull: always
     environment:
+      ABUILD_PUBKEY:
+        from_secret: ABUILD_PUBKEY
+      ABUILD_PRIVKEY:
+        from_secret: ABUILD_PRIVKEY
       DOCKER_HOST: "unix:///drone/docker.sock"
       RUST_BACKTRACE: 1
       RUST_LOG: debug
     commands:
       - docker -v
-      - echo "$ABUILD_PUBKEY" >alpine@msrd0.de-5fc3c0b2.rsa.pub
-      - echo "$ABUILD_PRIVKEY" >alpine@msrd0.de-5fc3c0b2.rsa
+      - echo "$$ABUILD_PUBKEY" >alpine@msrd0.de-5fc3c0b2.rsa.pub
+      - echo "$$ABUILD_PRIVKEY" >alpine@msrd0.de-5fc3c0b2.rsa
       - sha256sum alpine@msrd0.de-5fc3c0b2.rsa.pub alpine@msrd0.de-5fc3c0b2.rsa
+      - find . -name alpine-rust -executable
       - ./target/debug/alpine-rust
   
   - name: rebuild-cache
