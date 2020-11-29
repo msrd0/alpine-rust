@@ -1,0 +1,10 @@
+alpine = "3.12"
+privkey = "alpine@msrd0.de-5fc3c0b2.rsa"
+pubkey = "alpine@msrd0.de-5fc3c0b2.rsa.pub"
+
+[[versions]]
+rustver = "1.45"
+pkgver = "1.45.2"
+bootver = "1.44.0"
+bootsys = true
+aportsha = "7faac3aaabbf2dbf47eace0d5342ee619cf973d8"
