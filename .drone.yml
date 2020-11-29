@@ -58,4 +58,69 @@ steps:
       - cargo fmt -- -V
       - cargo fmt -- --check -l
 
+---
+kind: pipeline
+name: build
+
+depends_on:
+  - check
+trigger:
+  branch:
+    - master
+  event:
+    - cron
+    - custom
+    - push
+  status:
+    - success
+
+steps:
+  - name: restore-cache
+    image: meltwater/drone-cache:v1
+    pull: always
+    settings:
+      backend: "filesystem"
+      restore: true
+      cache_key: '{{ .Repo.Name }}_{{ checksum "Cargo.lock" }}_{{ arch }}_{{ os }}'
+      archive_format: "gzip"
+      mount:
+        - "target"
+    volumes:
+      - name: cache
+        path: /tmp/cache
+  
+  - name: build
+    image: rust:slim
+    pull: always
+    environment:
+      CARGO_HOME: target/cargo
+      DOCKER_HOST: "unix:///drone/docker.sock"
+      RUST_BACKTRACE: 1
+      RUST_LOG: debug
+    commands:
+      - cargo -V
+      - echo "$ABUILD_PUBKEY" >alpine@msrd0.de-5fc3c0b2.rsa.pub
+      - echo "$ABUILD_PRIVKEY" >alpine@msrd0.de-5fc3c0b2.rsa
+      - cargo run
+  
+  - name: rebuild-cache
+    image: meltwater/drone-cache:v1
+    pull: always
+    settings:
+      backend: "filesystem"
+      rebuild: true
+      cache_key: '{{ .Repo.Name }}_{{ checksum "Cargo.lock" }}_{{ arch }}_{{ os }}'
+      archive_format: "gzip"
+      mount:
+        - "target"
+    volumes:
+      - name: cache
+        path: /tmp/cache
+
+services:
+  - name: docker
+    image: docker:dind
+    priviledged: true
+    command: ['-H', 'unix:///drone/docker.sock']
+
 ...
