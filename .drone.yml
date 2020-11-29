@@ -123,4 +123,9 @@ services:
     priviledged: true
     command: ['-H', 'unix:///drone/docker.sock']
 
+volumes:
+  - name: cache
+    host:
+      path: /var/lib/cache
+
 ...
