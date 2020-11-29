@@ -98,6 +98,7 @@ steps:
     commands:
       - cargo -V
       - cargo build
+      - find . -name alpine-rust -executable
   
   - name: run
     image: docker
@@ -110,6 +111,7 @@ steps:
       - docker -v
       - echo "$ABUILD_PUBKEY" >alpine@msrd0.de-5fc3c0b2.rsa.pub
       - echo "$ABUILD_PRIVKEY" >alpine@msrd0.de-5fc3c0b2.rsa
+      - sha256sum alpine@msrd0.de-5fc3c0b2.rsa.pub alpine@msrd0.de-5fc3c0b2.rsa
       - ./target/debug/alpine-rust
   
   - name: rebuild-cache
