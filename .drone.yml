@@ -40,6 +40,19 @@ steps:
     volumes:
       - name: cache
         path: /tmp/cache
+  
+  - name: notify
+    image: drillster/drone-email
+    pull: always
+    settings:
+      host: smtp.migadu.com
+      username: noreply@drone.msrd0.eu
+      from: noreply@drone.msrd0.eu
+      password:
+        from_secret: SMTP_PASSWORD
+    when:
+      status:
+        - failure
 
 volumes:
   - name: cache
@@ -57,6 +70,19 @@ steps:
     commands:
       - cargo fmt -- -V
       - cargo fmt -- --check -l
+  
+  - name: notify
+    image: drillster/drone-email
+    pull: always
+    settings:
+      host: smtp.migadu.com
+      username: noreply@drone.msrd0.eu
+      from: noreply@drone.msrd0.eu
+      password:
+        from_secret: SMTP_PASSWORD
+    when:
+      status:
+        - failure
 
 ---
 kind: pipeline
@@ -140,6 +166,21 @@ steps:
     volumes:
       - name: cache
         path: /tmp/cache
+  
+  - name: notify
+    image: drillster/drone-email
+    pull: always
+    settings:
+      host: smtp.migadu.com
+      username: noreply@drone.msrd0.eu
+      from: noreply@drone.msrd0.eu
+      recipients:
+        - "alpine@msrd0.de"
+      password:
+        from_secret: SMTP_PASSWORD
+    when:
+      status:
+        - failure
 
 environment:
   RUST_BACKTRACE: 1
