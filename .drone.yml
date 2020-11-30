@@ -176,10 +176,12 @@ steps:
       host: smtp.migadu.com
       username: noreply@drone.msrd0.eu
       from: noreply@drone.msrd0.eu
-      recipients:
-        - "alpine@msrd0.de"
       password:
         from_secret: SMTP_PASSWORD
+      # only send me an email because I don't want contributors to be email if a cron job failed
+      recipients:
+        - "alpine@msrd0.de"
+      recipients_only: true
     when:
       status:
         - failure
