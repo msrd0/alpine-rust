@@ -152,6 +152,8 @@ steps:
     volumes:
       - name: dockersock
         path: /var/run
+      - name: tmp
+        path: /tmp
   
   - name: rebuild-cache
     image: meltwater/drone-cache:v1
@@ -192,12 +194,16 @@ services:
     volumes:
       - name: dockersock
         path: /var/run
+      - name: tmp
+        path: /tmp
 
 volumes:
   - name: cache
     host:
       path: /var/lib/cache
   - name: dockersock
+    temp: {}
+  - name: tmp
     temp: {}
 
 ...
