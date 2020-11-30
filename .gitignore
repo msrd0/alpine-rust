@@ -4,6 +4,7 @@
 .#*#
 *.bak
 *.orig
+.env
 
 *.rsa
 *.rsa.pub

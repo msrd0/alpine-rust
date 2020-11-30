@@ -15,6 +15,7 @@ version = "0.1.0"
 dependencies = [
  "askama",
  "bollard",
+ "lazy_static",
  "log",
  "num_cpus",
  "pretty_env_logger",
