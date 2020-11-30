@@ -114,6 +114,7 @@ prepare() {
 	# to patch them ourselves
 	for file in $(ls ../*.patch | sort)
 	do
+		echo " -> Applying patch $file"
 		patch -N -p 1 -i $file
 	done
 
