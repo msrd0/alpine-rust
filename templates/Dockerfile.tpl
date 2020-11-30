@@ -5,9 +5,10 @@ RUN apk add --no-cache alpine-sdk sudo
 
 # we will store the repository here
 VOLUME /repo
+RUN sed -i 's,REPODEST=.*,REPODEST=/repo,g' /etc/abuild.conf
 
 # install our repo
-RUN echo /repo/alpine/{{ alpine }}/rust >>/etc/apk/repositories
+RUN echo /repo/{{ alpine }}/alpine-rust/ >>/etc/apk/repositories
 COPY {{ pubkey }} /etc/apk/keys/
 
 # create build user
