@@ -115,13 +115,11 @@ steps:
     image: docker
     pull: always
     environment:
-      ABUILD_PUBKEY:
-        from_secret: ABUILD_PUBKEY
-      ABUILD_PRIVKEY:
-        from_secret: ABUILD_PRIVKEY
+      GITHUB_TOKEN:
+        from_secret: GITHUB_TOKEN
       RUST_LOG: info
     commands:
-      - apk add --no-cache libgcc
+      - apk add --no-cache libgcc git
       - docker -v
       - ./target/debug/alpine-rust
       - docker ps -a
