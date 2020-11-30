@@ -1,4 +1,4 @@
-use super::{tar_header, Config, APKBUILD};
+use super::{run_git, tar_header, Config, APKBUILD};
 use askama::Template;
 use bollard::{
 	container::{self, LogsOptions},
@@ -6,23 +6,27 @@ use bollard::{
 	models::{HostConfig, Mount, MountTypeEnum},
 	Docker
 };
-use std::{collections::HashMap, env::current_dir, fs::File, io::Cursor, process::exit};
-use tokio::{fs, io, stream::StreamExt};
+use std::{collections::HashMap, fs::File, io::Cursor, path::Path, process::exit};
+use tokio::{
+	fs, io,
+	stream::StreamExt,
+	time::{delay_for, Duration}
+};
 
-async fn up_to_date(config: &Config, ver: &APKBUILD) -> io::Result<bool> {
+async fn up_to_date(repodir: &Path, config: &Config, ver: &APKBUILD) -> io::Result<bool> {
 	let path = format!(
-		"repo/{}/alpine-rust/x86_64/rust-{}-{}-r{}.apk",
+		"{}/alpine-rust/x86_64/rust-{}-{}-r{}.apk",
 		config.alpine, ver.rustver, ver.pkgver, ver.pkgrel
 	);
-	match fs::metadata(&path).await {
+	match fs::metadata(repodir.join(path)).await {
 		Ok(_) => Ok(true),                                              // file exists
 		Err(err) if err.kind() == io::ErrorKind::NotFound => Ok(false), // not found
 		Err(err) => Err(err)                                            // other i/o error
 	}
 }
 
-pub(super) async fn build(docker: &Docker, config: &Config, ver: &APKBUILD) {
-	if up_to_date(config, ver).await.expect("Failed to read repo") {
+pub(super) async fn build(repodir: &Path, docker: &Docker, config: &Config, ver: &APKBUILD) {
+	if up_to_date(repodir, config, ver).await.expect("Failed to read repo") {
 		info!("Rust {} is up to date", ver.pkgver);
 		return;
 	}
@@ -90,7 +94,7 @@ pub(super) async fn build(docker: &Docker, config: &Config, ver: &APKBUILD) {
 	let mut mounts: Vec<Mount> = Vec::new();
 	mounts.push(Mount {
 		target: Some("/repo".to_string()),
-		source: Some(current_dir().unwrap().join("repo").to_string_lossy().to_string()),
+		source: Some(repodir.to_string_lossy().to_string()),
 		typ: Some(MountTypeEnum::BIND),
 		read_only: Some(false),
 		..Default::default()
@@ -134,4 +138,38 @@ pub(super) async fn build(docker: &Docker, config: &Config, ver: &APKBUILD) {
 		print!("{}", log);
 	}
 	info!("Log stream finished");
+
+	// ensure that the container has stopped
+	loop {
+		let running = docker
+			.inspect_container(&container.id, None)
+			.await
+			.expect("Failed to inspect container")
+			.state
+			.and_then(|state| state.running);
+		match running {
+			Some(true) => info!("Container {} is still running", container.id),
+			Some(false) => break,
+			None => warn!("Container {} might still be running", container.id)
+		};
+		delay_for(Duration::new(5, 0)).await;
+	}
+	info!("Container {} has stopped", container.id);
+
+	// commit the changes
+	info!("Commiting changes for rust-{}", ver.rustver);
+	let dir = format!("{}/alpine-rust/", config.alpine);
+	let msg = format!("Update rust-{} package for alpine {}", ver.rustver, config.alpine);
+	if !run_git(repodir, &["add", &dir]) {
+		error!("Failed to add files to git");
+		exit(1);
+	}
+	if !run_git(repodir, &["commit", "-m", &msg]) {
+		error!("Failed to create commit");
+		exit(1);
+	}
+	if !run_git(repodir, &["push"]) {
+		error!("Failed to push commit");
+		exit(1);
+	}
 }

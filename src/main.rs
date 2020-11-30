@@ -156,6 +156,6 @@ async fn main() {
 	let docker = Docker::connect_with_unix_defaults().expect("Cannot connect to docker daemon");
 
 	for ver in &config.versions {
-		package::build(&docker, &config, ver).await;
+		package::build(repodir.path(), &docker, &config, ver).await;
 	}
 }
