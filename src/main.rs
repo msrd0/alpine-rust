@@ -22,8 +22,8 @@ mod package;
 #[derive(Deserialize, Template)]
 #[template(path = "APKBUILD.tpl", escape = "none")]
 struct APKBUILD {
-	rustver: String,
-	pkgver: String,
+	rustminor: u32,
+	rustpatch: u32,
 	pkgrel: u32,
 	bootver: String,
 	bootsys: bool,

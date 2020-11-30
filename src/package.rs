@@ -15,8 +15,11 @@ use tokio::{
 
 async fn up_to_date(repodir: &Path, config: &Config, ver: &APKBUILD) -> io::Result<bool> {
 	let path = format!(
-		"{}/alpine-rust/x86_64/rust-{}-{}-r{}.apk",
-		config.alpine, ver.rustver, ver.pkgver, ver.pkgrel
+		"{alpine}/alpine-rust/x86_64/rust-1.{minor}-1.{minor}.{patch}-r{pkgrel}.apk",
+		alpine = config.alpine,
+		minor = ver.rustminor,
+		patch = ver.rustpatch,
+		pkgrel = ver.pkgrel
 	);
 	match fs::metadata(repodir.join(path)).await {
 		Ok(_) => Ok(true),                                              // file exists
@@ -27,11 +30,11 @@ async fn up_to_date(repodir: &Path, config: &Config, ver: &APKBUILD) -> io::Resu
 
 pub(super) async fn build(repodir: &Path, docker: &Docker, config: &Config, ver: &APKBUILD) {
 	if up_to_date(repodir, config, ver).await.expect("Failed to read repo") {
-		info!("Rust {} is up to date", ver.pkgver);
+		info!("Rust 1.{} is up to date", ver.rustminor);
 		return;
 	}
 
-	info!("Building Rust {}", ver.pkgver);
+	info!("Building Rust 1.{}.{}", ver.rustminor, ver.rustpatch);
 
 	let mut tar_buf: Vec<u8> = Vec::new();
 	let mut tar = tar::Builder::new(&mut tar_buf);
@@ -64,7 +67,7 @@ pub(super) async fn build(repodir: &Path, docker: &Docker, config: &Config, ver:
 	drop(tar);
 
 	// build the docker image
-	let img = format!("alpine-rust-builder-{}", ver.rustver);
+	let img = format!("alpine-rust-builder-1.{}", ver.rustminor);
 	info!("Building docker image {}", img);
 	let mut img_stream = docker.build_image(
 		BuildImageOptions {
@@ -141,25 +144,42 @@ pub(super) async fn build(repodir: &Path, docker: &Docker, config: &Config, ver:
 
 	// ensure that the container has stopped
 	loop {
-		let running = docker
+		delay_for(Duration::new(2, 0)).await;
+		let state = docker
 			.inspect_container(&container.id, None)
 			.await
 			.expect("Failed to inspect container")
-			.state
-			.and_then(|state| state.running);
-		match running {
-			Some(true) => info!("Container {} is still running", container.id),
-			Some(false) => break,
-			None => warn!("Container {} might still be running", container.id)
+			.state;
+		let state = match state {
+			Some(state) => state,
+			None => {
+				warn!("Container {} has unknown state", container.id);
+				continue;
+			}
 		};
-		delay_for(Duration::new(5, 0)).await;
+		if state.running == Some(true) {
+			info!("Container {} is still running", container.id);
+			continue;
+		}
+		let exit_code = match state.exit_code {
+			Some(exit_code) => exit_code,
+			None => {
+				warn!("Unable to get exit code for container {}, assuming 0", container.id);
+				break;
+			}
+		};
+		if exit_code != 0 {
+			error!("Container {} finished with exit code {}", container.id, exit_code);
+			exit(1);
+		}
+		break;
 	}
 	info!("Container {} has stopped", container.id);
 
 	// commit the changes
-	info!("Commiting changes for rust-{}", ver.rustver);
+	info!("Commiting changes for rust-1.{}", ver.rustminor);
 	let dir = format!("{}/alpine-rust/", config.alpine);
-	let msg = format!("Update rust-{} package for alpine {}", ver.rustver, config.alpine);
+	let msg = format!("Update rust-1.{} package for alpine {}", ver.rustminor, config.alpine);
 	if !run_git(repodir, &["add", &dir]) {
 		error!("Failed to add files to git");
 		exit(1);

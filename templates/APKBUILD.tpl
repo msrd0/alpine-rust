@@ -7,9 +7,9 @@
 # Contributor: Jeizsm <jeizsm@gmail.com>
 # Maintainer: Dominic Meiser <alpine@msrd0.de>
 _aportsha={{ aportsha }}
-_rustver={{ rustver }}
+_rustver=1.{{ rustminor }}
 pkgname=rust-$_rustver
-pkgver={{ pkgver }}
+pkgver=$_rustver.{{ rustpatch }}
 _llvmver=10
 _bootver={{ bootver }}
 pkgrel={{ pkgrel }}
@@ -73,6 +73,8 @@ source="https://static.rust-lang.org/dist/rustc-$pkgver-src.tar.gz
 	https://gitlab.alpinelinux.org/alpine/aports/-/raw/$_aportsha/community/rust/link-musl-dynamically.patch
 	https://gitlab.alpinelinux.org/alpine/aports/-/raw/$_aportsha/community/rust/musl-dont-use-crt-static.patch
 	https://gitlab.alpinelinux.org/alpine/aports/-/raw/$_aportsha/community/rust/0006-Prefer-libgcc_eh-over-libunwind-for-musl.patch
+	{% if rustminor <= 44 %}https://gitlab.alpinelinux.org/alpine/aports/-/raw/$_aportsha/community/rust/static-pie.patch{% endif %}
+	{% if rustminor <= 44 %}https://gitlab.alpinelinux.org/alpine/aports/-/raw/$_aportsha/community/rust/musl-fix-static-linking.patch{% endif %}
 "
 builddir="$srcdir/rustc-$pkgver-src"
 
