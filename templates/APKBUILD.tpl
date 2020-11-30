@@ -57,7 +57,7 @@ subpackages="
 	$pkgname-lldb::noarch
 	$pkgname-doc
 	$pkgname-src::noarch
-	cargo-$_rustver-$pkgver
+	cargo-$_rustver:_cargo
 	cargo-$_rustver-bash-completions:_cargo_bashcomp:noarch
 	cargo-$_rustver-zsh-completion:_cargo_zshcomp:noarch
 	cargo-$_rustver-doc:_cargo_doc:noarch
@@ -73,7 +73,7 @@ source="https://static.rust-lang.org/dist/rustc-$pkgver-src.tar.gz
 	https://gitlab.alpinelinux.org/alpine/aports/-/raw/$_aportsha/community/rust/link-musl-dynamically.patch
 	https://gitlab.alpinelinux.org/alpine/aports/-/raw/$_aportsha/community/rust/musl-dont-use-crt-static.patch
 	https://gitlab.alpinelinux.org/alpine/aports/-/raw/$_aportsha/community/rust/0006-Prefer-libgcc_eh-over-libunwind-for-musl.patch
-	"
+"
 builddir="$srcdir/rustc-$pkgver-src"
 
 # secfixes:
@@ -261,7 +261,7 @@ src() {
 	ln -s ../../../src/rust "$subpkgdir"/usr/lib/rustlib/src/rust
 }
 
-cargo() {
+_cargo() {
 	pkgdesc="The Rust package manager"
 	license="Apache-2.0 MIT UNLICENSE"
 	depends="$pkgname=$pkgver-r$pkgrel"
