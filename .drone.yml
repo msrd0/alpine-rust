@@ -24,8 +24,8 @@ steps:
       CARGO_HOME: target/cargo
       RUST_BACKTRACE: 1
     commands:
-      - apk update -y
-      - apk install -y libssl-dev pkgconf
+      - apt-get update -y
+      - apt-get install -y libssl-dev pkgconf
       - cargo -V
       - cargo check
   
