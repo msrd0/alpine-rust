@@ -15,6 +15,7 @@ use std::{
 use tempfile::{tempdir, TempDir};
 use tokio::{fs::File, io::AsyncReadExt};
 
+mod ec2;
 mod metadata;
 mod package;
 
@@ -144,10 +145,14 @@ async fn main() {
 		return;
 	}
 
+	// generate docker keys for ec2
+	ec2::gen_docker_keys().await.expect("Failed to generate docker keys");
+
 	// connect to docker
 	let docker = Docker::connect_with_unix_defaults().expect("Cannot connect to docker daemon");
 
-	for ver in &config.versions {
+	// update packages
+	for ver in pkg_updates {
 		package::build(repodir.path(), &docker, &config, ver).await;
 	}
 }

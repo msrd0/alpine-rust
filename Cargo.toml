@@ -7,12 +7,14 @@ authors = ["Dominic <git@msrd0.de>"]
 edition = "2018"
 
 [dependencies]
+anyhow = "1.0"
 askama = "0.10"
-bollard = "0.9"
+bollard = { version = "0.9", features = ["ssl"] }
 futures-util = "0.3.8"
 lazy_static = "1.4"
 log = "0.4"
 num_cpus = "1.13"
+openssl = "0.10.30"
 pretty_env_logger = "0.4"
 serde = { version = "1.0", features = ["derive"] }
 tar = "0.4"
