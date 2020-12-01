@@ -15,9 +15,10 @@ use std::{
 use tempfile::{tempdir, TempDir};
 use tokio::{fs::File, io::AsyncReadExt};
 
-mod ec2;
+mod docker;
 mod metadata;
 mod package;
+mod upcloud;
 
 #[derive(Deserialize, Template)]
 #[template(path = "APKBUILD.tpl", escape = "none")]
@@ -147,13 +148,13 @@ async fn main() {
 		}
 	*/
 
-	// generate docker keys for ec2
-	let keys = ec2::gen_docker_keys().await.expect("Failed to generate docker keys");
+	// generate docker keys
+	let keys = docker::gen_keys().await.expect("Failed to generate docker keys");
 
-	// launch an ec2 instance
-	ec2::launch_instance(keys.ca_pem, keys.server_cert_pem, keys.server_key_pem)
+	// launch an upcloud server
+	upcloud::launch_server(&keys.ca_pem, &keys.server_cert_pem, &keys.server_key_pem)
 		.await
-		.expect("Failed to launch EC2 instance");
+		.expect("Failed to launch UpCloud server");
 
 	/*
 		// connect to docker
