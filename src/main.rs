@@ -5,18 +5,17 @@ extern crate log;
 
 use askama::Template;
 use bollard::Docker;
+use futures_util::{stream, FutureExt, StreamExt};
 use serde::Deserialize;
 use std::{
 	env,
 	path::Path,
 	process::{exit, Command}
 };
-use tempfile::tempdir;
-use tokio::{
-	fs::{self, File},
-	io::{AsyncReadExt, AsyncWriteExt}
-};
+use tempfile::{tempdir, TempDir};
+use tokio::{fs::File, io::AsyncReadExt};
 
+mod metadata;
 mod package;
 
 #[derive(Deserialize, Template)]
@@ -84,20 +83,7 @@ fn run_git(dir: &Path, args: &[&str]) -> bool {
 	status.success()
 }
 
-#[tokio::main]
-async fn main() {
-	pretty_env_logger::init_timed();
-
-	info!("Reading versions.toml");
-	let mut config_file = File::open("versions.toml").await.expect("Unable to find versions.toml");
-	let mut config_buf = Vec::<u8>::new();
-	config_file
-		.read_to_end(&mut config_buf)
-		.await
-		.expect("Unable to read versions.toml");
-	drop(config_file);
-	let config: Config = toml::from_slice(&config_buf).expect("Invalid syntax in versions.toml");
-
+fn git_clone() -> TempDir {
 	info!("Cloning git repository");
 	let repodir = tempdir().expect("Failed to create tempdir");
 	let repourl = format!(
@@ -123,36 +109,42 @@ async fn main() {
 		exit(1);
 	}
 
-	info!("Updating repository metadata");
-	fs::copy(&config.pubkey, repodir.path().join(&config.pubkey))
+	repodir
+}
+
+#[tokio::main]
+async fn main() {
+	pretty_env_logger::init_timed();
+
+	info!("Reading versions.toml");
+	let mut config_file = File::open("versions.toml").await.expect("Unable to find versions.toml");
+	let mut config_buf = Vec::<u8>::new();
+	config_file
+		.read_to_end(&mut config_buf)
 		.await
-		.expect("Unable to copy pubkey");
-	let mut index_html = File::create(repodir.path().join("index.html"))
-		.await
-		.expect("Unable to create index.html");
-	index_html
-		.write_all(config.render().expect("Unable to render index.html").as_bytes())
-		.await
-		.expect("Unable to write index.html");
-	drop(index_html);
-	if !run_git(repodir.path(), &["diff", "--exit-code"]) {
-		info!("Commiting metadata changes");
-		if !run_git(repodir.path(), &["add", "index.html", &config.pubkey]) {
-			error!("Failed to add files to git");
-			exit(1);
-		}
-		if !run_git(repodir.path(), &["commit", "-m", "Update repository metadata"]) {
-			error!("Failed to create commit");
-			exit(1);
-		}
-		if !run_git(repodir.path(), &["push"]) {
-			error!("Failed to push commit");
-			exit(1);
-		}
-	} else {
-		info!("Metadata up to date");
+		.expect("Unable to read versions.toml");
+	drop(config_file);
+	let config: Config = toml::from_slice(&config_buf).expect("Invalid syntax in versions.toml");
+
+	// clone the git repo
+	let repodir = git_clone();
+
+	// update the metadata
+	metadata::update(&config, repodir.path()).await;
+
+	// search for versions that need to be updated
+	let pkg_updates = stream::iter(config.versions.iter())
+		.filter(|ver| package::up_to_date(repodir.path(), &config, ver).map(|up_to_date| !up_to_date))
+		.collect::<Vec<_>>()
+		.await;
+
+	// if everything is up to date, simply exit
+	if pkg_updates.is_empty() {
+		info!("Everything is up to date");
+		return;
 	}
 
+	// connect to docker
 	let docker = Docker::connect_with_unix_defaults().expect("Cannot connect to docker daemon");
 
 	for ver in &config.versions {

@@ -6,14 +6,14 @@ use bollard::{
 	models::{HostConfig, Mount, MountTypeEnum},
 	Docker
 };
+use futures_util::StreamExt;
 use std::{collections::HashMap, fs::File, io::Cursor, path::Path, process::exit};
 use tokio::{
 	fs, io,
-	stream::StreamExt,
 	time::{delay_for, Duration}
 };
 
-async fn up_to_date(repodir: &Path, config: &Config, ver: &APKBUILD) -> io::Result<bool> {
+pub(super) async fn up_to_date(repodir: &Path, config: &Config, ver: &APKBUILD) -> bool {
 	let path = format!(
 		"{alpine}/alpine-rust/x86_64/rust-1.{minor}-1.{minor}.{patch}-r{pkgrel}.apk",
 		alpine = config.alpine,
@@ -22,14 +22,18 @@ async fn up_to_date(repodir: &Path, config: &Config, ver: &APKBUILD) -> io::Resu
 		pkgrel = ver.pkgrel
 	);
 	match fs::metadata(repodir.join(path)).await {
-		Ok(_) => Ok(true),                                              // file exists
-		Err(err) if err.kind() == io::ErrorKind::NotFound => Ok(false), // not found
-		Err(err) => Err(err)                                            // other i/o error
+		Ok(_) => true,                                              // file exists
+		Err(err) if err.kind() == io::ErrorKind::NotFound => false, // not found
+		Err(err) => {
+			// other i/o error
+			error!("Unable to check if package was up to date: {}", err);
+			exit(1);
+		}
 	}
 }
 
 pub(super) async fn build(repodir: &Path, docker: &Docker, config: &Config, ver: &APKBUILD) {
-	if up_to_date(repodir, config, ver).await.expect("Failed to read repo") {
+	if up_to_date(repodir, config, ver).await {
 		info!("Rust 1.{} is up to date", ver.rustminor);
 		return;
 	}

@@ -9,6 +9,7 @@ edition = "2018"
 [dependencies]
 askama = "0.10"
 bollard = "0.9"
+futures-util = "0.3.8"
 lazy_static = "1.4"
 log = "0.4"
 num_cpus = "1.13"
@@ -17,4 +18,4 @@ serde = { version = "1.0", features = ["derive"] }
 tar = "0.4"
 tempfile = "3.1"
 toml = "0.5"
-tokio = { version = "0.2", features = ["fs", "macros", "rt-threaded", "time"] }
+tokio = { version = "0.2", features = ["fs", "macros", "rt-threaded", "stream", "time"] }
