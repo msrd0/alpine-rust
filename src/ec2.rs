@@ -1,3 +1,4 @@
+use askama::Template;
 use openssl::{
 	asn1::Asn1Time,
 	ec::{EcGroup, EcKey},
@@ -9,9 +10,46 @@ use openssl::{
 		X509Builder, X509NameBuilder, X509
 	}
 };
+use rand::{distributions::Alphanumeric, thread_rng, Rng};
+use rusoto_core::Region;
+use rusoto_ec2::{Ec2, Ec2Client, RunInstancesRequest};
 use std::path::Path;
 use tempfile::{tempdir, TempDir};
 use tokio::{fs::File, io::AsyncWriteExt};
+
+#[derive(Template)]
+#[template(path = "launch.sh", escape = "none")]
+struct LaunchScript {
+	ca_pem: String,
+	cert_pem: String,
+	key_pem: String
+}
+
+pub(super) async fn launch_instance(ca_pem: String, cert_pem: String, key_pem: String) -> anyhow::Result<()> {
+	let ec2 = Ec2Client::new(Region::EuWest1);
+	let rng = thread_rng();
+
+	let _name = format!("alpine-rust-{}", rng.sample_iter(Alphanumeric).take(10).collect::<String>());
+
+	let launch_script = LaunchScript {
+		ca_pem,
+		cert_pem,
+		key_pem
+	}
+	.render()?;
+	println!("{}", launch_script);
+	ec2.run_instances(RunInstancesRequest {
+		image_id: Some("ami-00b951edb5915f3a8".to_owned()), // debian 10 buster
+		instance_type: Some("c5a.large".to_owned()),        // 2 Threads / 4 GB on AMD EPYC
+		min_count: 1,
+		max_count: 1,
+		user_data: Some(base64::encode(launch_script.as_bytes())),
+		..Default::default()
+	})
+	.await?;
+
+	Ok(())
+}
 
 async fn write_privkey_pem<T: HasPrivate>(key: &EcKey<T>, path: &Path) -> anyhow::Result<()> {
 	info!("Writing key file {}", path.to_string_lossy());
@@ -29,7 +67,14 @@ async fn write_x509_pem(x509: &X509, path: &Path) -> anyhow::Result<()> {
 	Ok(())
 }
 
-pub(super) async fn gen_docker_keys() -> anyhow::Result<TempDir> {
+pub(super) struct DockerKeys {
+	tmpdir: TempDir,
+	pub(super) ca_pem: String,
+	pub(super) server_cert_pem: String,
+	pub(super) server_key_pem: String
+}
+
+pub(super) async fn gen_docker_keys() -> anyhow::Result<DockerKeys> {
 	info!("Generating Docker Keys");
 	let domain = "thisdoesnotexist.org";
 	let ip = "127.0.0.1";
@@ -70,9 +115,11 @@ pub(super) async fn gen_docker_keys() -> anyhow::Result<TempDir> {
 	ca_cert.append_extension(ca_cert_ext_bc.build()?)?;
 	ca_cert.sign(&ca_privkey, sha256)?;
 	let ca_cert = ca_cert.build();
+	let ca_pem = String::from_utf8(ca_cert.to_pem()?)?;
 	write_x509_pem(&ca_cert, &dir.join("ca.pem")).await?;
 
 	let server_key = EcKey::generate(&secp384r1)?;
+	let server_key_pem = String::from_utf8(server_key.public_key_to_pem()?)?;
 	write_privkey_pem(&server_key, &dir.join("server-key.pem")).await?;
 	let server_pubkey = PKey::from_ec_key(EcKey::from_public_key(&secp384r1, server_key.public_key())?)?;
 
@@ -90,6 +137,7 @@ pub(super) async fn gen_docker_keys() -> anyhow::Result<TempDir> {
 	server_cert.append_extension(server_cert_ext_usage)?;
 	server_cert.sign(&ca_privkey, sha256)?;
 	let server_cert = server_cert.build();
+	let server_cert_pem = String::from_utf8(server_cert.to_pem()?)?;
 	write_x509_pem(&server_cert, &dir.join("server.pem")).await?;
 
 	let client_key = EcKey::generate(&secp384r1)?;
@@ -109,5 +157,10 @@ pub(super) async fn gen_docker_keys() -> anyhow::Result<TempDir> {
 	let client_cert = client_cert.build();
 	write_x509_pem(&client_cert, &dir.join("client.pem")).await?;
 
-	Ok(keydir)
+	Ok(DockerKeys {
+		tmpdir: keydir,
+		ca_pem,
+		server_cert_pem,
+		server_key_pem
+	})
 }

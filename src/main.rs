@@ -127,32 +127,41 @@ async fn main() {
 	drop(config_file);
 	let config: Config = toml::from_slice(&config_buf).expect("Invalid syntax in versions.toml");
 
-	// clone the git repo
-	let repodir = git_clone();
+	/*
+		// clone the git repo
+		let repodir = git_clone();
 
-	// update the metadata
-	metadata::update(&config, repodir.path()).await;
+		// update the metadata
+		metadata::update(&config, repodir.path()).await;
 
-	// search for versions that need to be updated
-	let pkg_updates = stream::iter(config.versions.iter())
-		.filter(|ver| package::up_to_date(repodir.path(), &config, ver).map(|up_to_date| !up_to_date))
-		.collect::<Vec<_>>()
-		.await;
+		// search for versions that need to be updated
+		let pkg_updates = stream::iter(config.versions.iter())
+			.filter(|ver| package::up_to_date(repodir.path(), &config, ver).map(|up_to_date| !up_to_date))
+			.collect::<Vec<_>>()
+			.await;
 
-	// if everything is up to date, simply exit
-	if pkg_updates.is_empty() {
-		info!("Everything is up to date");
-		return;
-	}
+		// if everything is up to date, simply exit
+		if pkg_updates.is_empty() {
+			info!("Everything is up to date");
+			return;
+		}
+	*/
 
 	// generate docker keys for ec2
-	ec2::gen_docker_keys().await.expect("Failed to generate docker keys");
+	let keys = ec2::gen_docker_keys().await.expect("Failed to generate docker keys");
 
-	// connect to docker
-	let docker = Docker::connect_with_unix_defaults().expect("Cannot connect to docker daemon");
+	// launch an ec2 instance
+	ec2::launch_instance(keys.ca_pem, keys.server_cert_pem, keys.server_key_pem)
+		.await
+		.expect("Failed to launch EC2 instance");
 
-	// update packages
-	for ver in pkg_updates {
-		package::build(repodir.path(), &docker, &config, ver).await;
-	}
+	/*
+		// connect to docker
+		let docker = Docker::connect_with_unix_defaults().expect("Cannot connect to docker daemon");
+
+		// update packages
+		for ver in pkg_updates {
+			package::build(repodir.path(), &docker, &config, ver).await;
+		}
+	*/
 }
