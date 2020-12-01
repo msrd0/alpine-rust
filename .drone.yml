@@ -24,6 +24,8 @@ steps:
       CARGO_HOME: target/cargo
       RUST_BACKTRACE: 1
     commands:
+      - apk update -y
+      - apk install -y libssl-dev pkgconf
       - cargo -V
       - cargo check
   
@@ -121,7 +123,7 @@ steps:
     environment:
       CARGO_HOME: target/cargo
     commands:
-      - apk add --no-cache cargo rust
+      - apk add --no-cache cargo libressl-dev pkgconf rust
       - cargo -V
       - cargo build
   
@@ -145,7 +147,7 @@ steps:
         from_secret: GITHUB_TOKEN
       RUST_LOG: info
     commands:
-      - apk add --no-cache libgcc git
+      - apk add --no-cache git libgcc libressl
       - docker -v
       - ./target/debug/alpine-rust
       - docker ps -a
