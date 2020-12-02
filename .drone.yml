@@ -141,7 +141,7 @@ steps:
       - echo "$$ABUILD_PRIVKEY" >alpine@msrd0.de-5fc3c0b2.rsa
   
   - name: run
-    image: debian:slim
+    image: debian:buster-slim
     pull: always
     environment:
       GITHUB_TOKEN:
