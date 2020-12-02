@@ -22,7 +22,7 @@ use tokio::{
 	time::delay_for
 };
 
-pub const UPCLOUD_CORES: u16 = 10;
+pub const UPCLOUD_CORES: u16 = 12;
 pub const UPCLOUD_MEMORY: u16 = UPCLOUD_CORES * 1024;
 pub const UPCLOUD_STORAGE: u16 = 15;
 
@@ -414,7 +414,8 @@ pub(super) async fn launch_server(config: &Config, repodir: &Path) -> surf::Resu
 		)
 		.await?;
 	}
-	run(&mut sess, "chmod -R o+w /var/lib/alpine-rust")?;
+	run(&mut sess, "chmod 777 $(find /var/lib/alpine-rust -type d)")?;
+	run(&mut sess, "chmod 666 $(find /var/lib/alpine-rust -type f)")?;
 
 	// index the repository
 	let repo_index = index(&mut sess, &dir)?;
