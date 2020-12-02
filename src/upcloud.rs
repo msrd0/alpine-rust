@@ -22,6 +22,9 @@ use tokio::{
 	time::delay_for
 };
 
+pub const UPCLOUD_CORES: u8 = 6;
+pub const UPCLOUD_MEMORY: u16 = 8192;
+
 #[derive(Serialize)]
 struct CreateServerRequest {
 	server: CreateServer
@@ -104,8 +107,8 @@ impl CreateServerRequest {
 				title,
 				hostname,
 				plan: "custom".to_owned(),
-				core_number: "6".to_owned(),
-				memory_amount: "8192".to_owned(),
+				core_number: UPCLOUD_CORES.to_string(),
+				memory_amount: UPCLOUD_MEMORY.to_string(),
 				zone: "de-fra1".to_owned(),
 				storage_devices: StorageDevices {
 					storage_device: vec![StorageDevice {

@@ -47,7 +47,7 @@ struct Dockerfile<'a> {
 	alpine: &'a str,
 	pubkey: &'a str,
 	privkey: &'a str,
-	jobs: usize
+	jobs: u8
 }
 
 impl Config {
@@ -56,7 +56,7 @@ impl Config {
 			alpine: &self.alpine,
 			pubkey: &self.pubkey,
 			privkey: &self.privkey,
-			jobs: num_cpus::get()
+			jobs: upcloud::UPCLOUD_CORES
 		}
 	}
 }

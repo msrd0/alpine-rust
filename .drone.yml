@@ -123,7 +123,7 @@ steps:
     environment:
       CARGO_HOME: target/cargo
     commands:
-      - apk add --no-cache cargo libressl-dev pkgconf rust
+      - apk add --no-cache cargo libressl-dev libssh2-dev pkgconf rust
       - cargo -V
       - cargo build
   
@@ -140,22 +140,17 @@ steps:
       - echo "$$ABUILD_PRIVKEY" >alpine@msrd0.de-5fc3c0b2.rsa
   
   - name: run
-    image: docker
+    image: alpine:3.12
     pull: always
     environment:
       GITHUB_TOKEN:
         from_secret: GITHUB_TOKEN
       RUST_LOG: info
+      UPCLOUD_PASSWORD:
+        from_secret: UPCLOUD_PASSWORD
     commands:
-      - apk add --no-cache git libgcc libressl
-      - docker -v
+      - apk add --no-cache git libgcc libressl libssh2
       - ./target/debug/alpine-rust
-      - docker ps -a
-    volumes:
-      - name: dockersock
-        path: /var/run
-      - name: tmp
-        path: /tmp
   
   - name: rebuild-cache
     image: meltwater/drone-cache:v1
@@ -191,23 +186,9 @@ steps:
 environment:
   RUST_BACKTRACE: 1
 
-services:
-  - name: docker
-    image: docker:dind
-    privileged: true
-    volumes:
-      - name: dockersock
-        path: /var/run
-      - name: tmp
-        path: /tmp
-
 volumes:
   - name: cache
     host:
       path: /var/lib/cache
-  - name: dockersock
-    temp: {}
-  - name: tmp
-    temp: {}
 
 ...
