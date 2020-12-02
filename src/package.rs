@@ -1,4 +1,4 @@
-use super::{run_git, tar_header, Config, APKBUILD};
+use super::{tar_header, Config, APKBUILD};
 use askama::Template;
 use bollard::{
 	container::{self, LogsOptions},
@@ -32,7 +32,7 @@ pub(super) async fn up_to_date(repodir: &Path, config: &Config, ver: &APKBUILD) 
 	}
 }
 
-pub(super) async fn build(repodir: &Path, docker: &Docker, config: &Config, ver: &APKBUILD) {
+pub(super) async fn build(docker: &Docker, config: &Config, ver: &APKBUILD) {
 	info!("Building Rust 1.{}.{}", ver.rustminor, ver.rustpatch);
 
 	let mut tar_buf: Vec<u8> = Vec::new();

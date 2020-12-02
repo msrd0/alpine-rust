@@ -167,9 +167,12 @@ async fn main() {
 
 	// update packages
 	for ver in pkg_updates {
-		package::build(repodir.path(), &docker, &config, ver).await;
+		package::build(&docker, &config, ver).await;
 		upcloud::commit_changes(&config, ver, repodir.path(), &mut server)
 			.await
 			.expect("Failed to commit changes");
 	}
+
+	// remove the server
+	server.destroy().await.expect("Failed to destroy the server");
 }

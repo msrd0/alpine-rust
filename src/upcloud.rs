@@ -32,6 +32,8 @@ struct CreateServer {
 	title: String,
 	hostname: String,
 	plan: String,
+	core_number: String,
+	memory_amount: String,
 	zone: String,
 	storage_devices: StorageDevices
 }
@@ -102,13 +104,15 @@ impl CreateServerRequest {
 				title,
 				hostname,
 				plan: "custom".to_owned(),
+				core_number: "6".to_owned(),
+				memory_amount: "8192".to_owned(),
 				zone: "de-fra1".to_owned(),
 				storage_devices: StorageDevices {
 					storage_device: vec![StorageDevice {
 						action: "clone".to_owned(),
 						storage: "01000000-0000-4000-8000-000020050100".to_owned(),
 						title: storage_title,
-						size: 10,
+						size: 20,
 						tier: "maxiops".to_owned()
 					}]
 				}
@@ -126,6 +130,62 @@ impl CreateServerRequest {
 			.await?;
 		info!("Response: {:?}", value);
 		Ok(serde_json::from_value(value)?)
+	}
+}
+
+#[derive(Serialize)]
+struct StopServerRequest {
+	stop_server: StopServer
+}
+
+#[derive(Serialize)]
+struct StopServer {
+	stop_type: &'static str,
+	timeout: &'static str
+}
+
+impl StopServerRequest {
+	fn new() -> Self {
+		Self {
+			stop_server: StopServer {
+				stop_type: "soft",
+				timeout: "30"
+			}
+		}
+	}
+
+	async fn send(&self, username: &str, password: &str, server_uuid: &str) -> surf::Result<serde_json::Value> {
+		let auth = format!("{}:{}", username, password);
+		let value: serde_json::Value = surf::post(format!("https://api.upcloud.com/1.3/server/{}/stop", server_uuid))
+			.header("authorization", format!("Basic {}", base64::encode(auth.as_bytes())))
+			.content_type(JSON)
+			.body(Body::from_json(self)?)
+			.recv_json()
+			.await?;
+		info!("Response: {:?}", value);
+		Ok(value)
+	}
+}
+
+#[derive(Serialize)]
+struct DeleteServerRequest {
+	storages: u8
+}
+
+impl DeleteServerRequest {
+	fn new() -> Self {
+		Self { storages: 1 }
+	}
+
+	async fn send(&self, username: &str, password: &str, server_uuid: &str) -> surf::Result<serde_json::Value> {
+		let auth = format!("{}:{}", username, password);
+		let value: serde_json::Value = surf::delete(format!("https://api.upcloud.com/1.3/server/{}", server_uuid))
+			.query(self)?
+			.header("authorization", format!("Basic {}", base64::encode(auth.as_bytes())))
+			.recv_json()
+			.await?;
+		info!("Response: {:?}", value);
+		Ok(value)
 	}
 }
 
@@ -244,6 +304,7 @@ async fn download(sess: &mut Session, path: &str, host: &Path) -> anyhow::Result
 	Ok(())
 }
 
+#[allow(dead_code)]
 pub(super) struct UpcloudServer {
 	pub(super) ip: String,
 	pub(super) domain: String,
@@ -254,6 +315,21 @@ pub(super) struct UpcloudServer {
 	repo_index: HashMap<String, String>
 }
 
+impl UpcloudServer {
+	pub(super) async fn destroy(&self) -> surf::Result<()> {
+		info!("Removing Server {}", self.uuid);
+
+		let username = "msrd0";
+		let password = env::var("UPCLOUD_PASSWORD")?;
+
+		StopServerRequest::new().send(username, &password, &self.uuid).await?;
+		delay_for(Duration::new(30, 0)).await;
+		DeleteServerRequest::new().send(username, &password, &self.uuid).await?;
+
+		Ok(())
+	}
+}
+
 pub(super) async fn launch_server(config: &Config, repodir: &Path) -> surf::Result<UpcloudServer> {
 	let rng = thread_rng();
 	let hostname = rng.sample_iter(Alphanumeric).take(10).collect::<String>();
@@ -262,14 +338,11 @@ pub(super) async fn launch_server(config: &Config, repodir: &Path) -> surf::Resu
 	info!("Creating Server {}", title);
 	let username = "msrd0";
 	let password = env::var("UPCLOUD_PASSWORD")?;
-	//let req = CreateServerRequest::new(title, "alpinerust".to_owned());
-	//let server = req.send(username, &password).await?;
-	//let ip = server.ip_addr().ok_or(anyhow::Error::msg("Server does not have an IP"))?;
-	//let password = server.password();
-	//let uuid = server.uuid();
-	let ip = "94.237.97.225";
-	let password = "REDACTED";
-	let uuid = "";
+	let req = CreateServerRequest::new(title, "alpinerust".to_owned());
+	let server = req.send(username, &password).await?;
+	let ip = server.ip_addr().ok_or(anyhow::Error::msg("Server does not have an IP"))?;
+	let password = server.password();
+	let uuid = server.uuid();
 
 	// rustls doesn't support ip's, so we need to guess a dns name
 	let domain = format!("{}.de-fra1.upcloud.host", ip.split('.').collect::<Vec<_>>().join("-"));
