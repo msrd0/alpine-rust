@@ -194,6 +194,34 @@ impl DeleteServerRequest {
 	}
 }
 
+fn try_connect(domain: &str, password: &str) -> anyhow::Result<Session> {
+	let addr = (domain, 22).to_socket_addrs()?.next().unwrap();
+	let tcp = TcpStream::connect(addr)?;
+	let mut sess = Session::new()?;
+	sess.set_tcp_stream(tcp);
+	sess.handshake()?;
+	sess.userauth_password("root", password)?;
+	Ok(sess)
+}
+
+async fn connect(domain: &str, password: &str) -> anyhow::Result<Session> {
+	let mut error = None;
+	for i in 0..10 {
+		info!("Connecting to {}:22", domain);
+		let err = match try_connect(domain, password) {
+			Ok(sess) => return Ok(sess),
+			Err(err) => err
+		};
+		error!("{}", err);
+		error = Some(err);
+
+		let wait = 2 * (i + 1);
+		info!("Retrying SSH connection in {}s", wait);
+		delay_for(Duration::new(wait, 0)).await;
+	}
+	Err(error.unwrap())
+}
+
 fn run(sess: &mut Session, cmd: &str) -> anyhow::Result<()> {
 	info!("SSH: Running `{}`", cmd);
 	let mut channel = sess.channel_session()?;
@@ -352,27 +380,11 @@ pub(super) async fn launch_server(config: &Config, repodir: &Path) -> surf::Resu
 	// rustls doesn't support ip's, so we need to guess a dns name
 	let domain = format!("{}.de-fra1.upcloud.host", ip.split('.').collect::<Vec<_>>().join("-"));
 
-	// wait for the domain to exist
-	info!("Waiting for {}", domain);
-	let addr;
-	loop {
-		delay_for(Duration::new(1, 0)).await;
-		if let Ok(mut socket_addr) = (domain.as_ref(), 22).to_socket_addrs() {
-			addr = socket_addr.next().unwrap();
-			break;
-		}
-	}
-
-	// wait some more for the ssh server
-	delay_for(Duration::new(30, 0)).await;
+	// wait for the server and domain to be set up
+	delay_for(Duration::new(10, 0)).await;
 
 	// open an SSH connection
-	info!("Connecting to {}:22", domain);
-	let tcp = TcpStream::connect(addr)?;
-	let mut sess = Session::new()?;
-	sess.set_tcp_stream(tcp);
-	sess.handshake()?;
-	sess.userauth_password("root", password)?;
+	let mut sess = connect(&domain, password).await?;
 
 	// install docker and stop it after the stupid autostart
 	run(&mut sess, "apt-get update -y")?;
@@ -440,13 +452,7 @@ pub(super) async fn commit_changes(
 	server: &mut UpcloudServer
 ) -> anyhow::Result<()> {
 	// establish a new ssh session
-	info!("Connecting to {}:22", server.domain);
-	let addr = (server.domain.as_ref(), 22).to_socket_addrs()?.next().unwrap();
-	let tcp = TcpStream::connect(addr)?;
-	let mut sess = Session::new()?;
-	sess.set_tcp_stream(tcp);
-	sess.handshake()?;
-	sess.userauth_password("root", &server.password)?;
+	let mut sess = connect(&server.domain, &server.password).await?;
 
 	// pull the current index
 	let dir = format!("/var/lib/alpine-rust/{}/alpine-rust/x86_64", config.alpine);
