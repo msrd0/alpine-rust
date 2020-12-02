@@ -151,7 +151,7 @@ steps:
         from_secret: UPCLOUD_PASSWORD
     commands:
       - apt-get update -y
-      - apt-get install -y --no-install-recommends git libgcc1 libssh2-1 libssl
+      - apt-get install -y --no-install-recommends git libgcc1 libssh2-1 libssl1.1
       - ./target/debug/alpine-rust
   
   - name: rebuild-cache
