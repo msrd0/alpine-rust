@@ -47,7 +47,7 @@ struct Dockerfile<'a> {
 	alpine: &'a str,
 	pubkey: &'a str,
 	privkey: &'a str,
-	jobs: u8
+	jobs: u16
 }
 
 impl Config {

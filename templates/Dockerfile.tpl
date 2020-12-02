@@ -5,7 +5,7 @@ RUN apk add --no-cache alpine-sdk sudo
 
 # we will store the repository here
 VOLUME /repo
-RUN sed -i 's,REPODEST=.*,REPODEST=/repo,g' /etc/abuild.conf
+RUN sed -i 's,REPODEST=.*,REPODEST=/repo/{{ alpine }},g' /etc/abuild.conf
 
 # install our repo
 RUN echo /repo/{{ alpine }}/alpine-rust/ >>/etc/apk/repositories
@@ -31,4 +31,4 @@ WORKDIR /home/alpine-rust/package
 COPY APKBUILD ./
 
 # the command to build is pretty straight-forward
-CMD ["/bin/ash", "-c", "sudo apk update && abuild -r"]
+CMD ["/bin/ash", "-c", "sudo apk update && abuild -r && find /repo/{{ alpine }} -type f"]

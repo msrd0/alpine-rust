@@ -22,8 +22,9 @@ use tokio::{
 	time::delay_for
 };
 
-pub const UPCLOUD_CORES: u8 = 6;
-pub const UPCLOUD_MEMORY: u16 = 8192;
+pub const UPCLOUD_CORES: u16 = 10;
+pub const UPCLOUD_MEMORY: u16 = UPCLOUD_CORES * 1024;
+pub const UPCLOUD_STORAGE: u16 = 15;
 
 #[derive(Serialize)]
 struct CreateServerRequest {
@@ -51,7 +52,7 @@ struct StorageDevice {
 	action: String,
 	storage: String,
 	title: String,
-	size: u32,
+	size: u16,
 	tier: String
 }
 
@@ -115,7 +116,7 @@ impl CreateServerRequest {
 						action: "clone".to_owned(),
 						storage: "01000000-0000-4000-8000-000020050100".to_owned(),
 						title: storage_title,
-						size: 20,
+						size: UPCLOUD_STORAGE,
 						tier: "maxiops".to_owned()
 					}]
 				}
@@ -180,15 +181,15 @@ impl DeleteServerRequest {
 		Self { storages: 1 }
 	}
 
-	async fn send(&self, username: &str, password: &str, server_uuid: &str) -> surf::Result<serde_json::Value> {
+	async fn send(&self, username: &str, password: &str, server_uuid: &str) -> surf::Result<()> {
 		let auth = format!("{}:{}", username, password);
-		let value: serde_json::Value = surf::delete(format!("https://api.upcloud.com/1.3/server/{}", server_uuid))
+		let bytes = surf::delete(format!("https://api.upcloud.com/1.3/server/{}", server_uuid))
 			.query(self)?
 			.header("authorization", format!("Basic {}", base64::encode(auth.as_bytes())))
-			.recv_json()
+			.recv_bytes()
 			.await?;
-		info!("Response: {:?}", value);
-		Ok(value)
+		info!("Response: {:?}", bytes);
+		Ok(())
 	}
 }
 
@@ -362,7 +363,7 @@ pub(super) async fn launch_server(config: &Config, repodir: &Path) -> surf::Resu
 	}
 
 	// wait some more for the ssh server
-	delay_for(Duration::new(5, 0)).await;
+	delay_for(Duration::new(30, 0)).await;
 
 	// open an SSH connection
 	info!("Connecting to {}:22", domain);
