@@ -5,9 +5,11 @@ use ssh2::Session;
 use std::{
 	env,
 	io::{BufRead, BufReader, Write},
-	net::{SocketAddr, TcpStream}
+	net::{SocketAddr, TcpStream, ToSocketAddrs},
+	time::Duration
 };
 use surf::{http::mime::JSON, Body};
+use tokio::time::delay_for;
 
 #[derive(Serialize)]
 struct CreateServerRequest {
@@ -179,7 +181,20 @@ pub(super) async fn launch_server() -> surf::Result<UpcloudServer> {
 	// rustls doesn't support ip's, so we need to guess a dns name
 	let domain = format!("{}.de-fra1.upcloud.host", ip.split('.').collect::<Vec<_>>().join("-"));
 
-	let tcp = TcpStream::connect(format!("{}:22", ip).parse::<SocketAddr>()?)?;
+	// wait for the domain to exist
+	info!("Waiting for {}", domain);
+	let addr;
+	loop {
+		delay_for(Duration::new(1, 0)).await;
+		if let Ok(mut socket_addr) = (domain.as_ref(), 22).to_socket_addrs() {
+			addr = socket_addr.next().unwrap();
+			break;
+		}
+	}
+
+	// open an SSH connection
+	info!("Connecting to {}:22", domain);
+	let tcp = TcpStream::connect(addr)?;
 	let mut sess = Session::new()?;
 	sess.set_tcp_stream(tcp);
 	sess.handshake()?;
