@@ -22,8 +22,9 @@ use tokio::{
 	time::delay_for
 };
 
-pub const UPCLOUD_CORES: u16 = 12;
-pub const UPCLOUD_MEMORY: u16 = UPCLOUD_CORES * 1024;
+// 12 cores was just above 1h so 14 cores should compile within 1h
+pub const UPCLOUD_CORES: u16 = 14;
+pub const UPCLOUD_MEMORY: u16 = 12 * 1024;
 pub const UPCLOUD_STORAGE: u16 = 15;
 
 #[derive(Serialize)]
