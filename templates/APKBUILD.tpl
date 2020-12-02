@@ -45,6 +45,8 @@ makedepends_host="
 	zlib-dev
 "
 
+provides="rust=$pkgver"
+
 # This is needed for -src that contains some testing binaries.
 # Disable tests for now, while we use foreign triplets
 options="!archcheck !check"
@@ -218,6 +220,7 @@ package() {
 stdlib() {
 	pkgdesc="Standard library for Rust (static rlibs)"
 	depends=
+	provides="rust-stdlib=$pkgver"
 
 	_mv "$pkgdir"/$_rlibdir/*.rlib "$subpkgdir"/$_rlibdir/
 }
@@ -225,6 +228,7 @@ stdlib() {
 analysis() {
 	pkgdesc="Compiler analysis data for the Rust standard library"
 	depends="$pkgname-stdlib=$pkgver-r$pkgrel"
+	provides="rust-analysis=$pkgver"
 
 	_mv "$pkgdir"/$_rlibdir/../analysis "$subpkgdir"/${_rlibdir%/*}/
 }
@@ -232,6 +236,7 @@ analysis() {
 gdb() {
 	pkgdesc="GDB pretty printers for Rust"
 	depends="$pkgname=$pkgver-r$pkgrel gdb"
+	provides="rust-gdb=$pkgver"
 
 	mkdir -p "$subpkgdir"
 	cd "$subpkgdir"
@@ -244,6 +249,7 @@ lldb() {
 	local _pyver=${_python#python}
 	pkgdesc="LLDB pretty printers for Rust"
 	depends="$pkgname=$pkgver-r$pkgrel lldb py$_pyver-lldb"
+	provides="rust-lldb=$pkgver"
 
 	mkdir -p "$subpkgdir"
 	cd "$subpkgdir"
@@ -254,8 +260,9 @@ lldb() {
 
 src() {
 	pkgdesc="$pkgdesc (source code)"
-	depends="$pkgname=$pkgver-r$pkgrel"
 	license="$license OFL-1.1 GPL-3.0-or-later GPL-3.0-with-GCC-exception CC-BY-SA-3.0 LGPL-3.0"
+	depends="$pkgname=$pkgver-r$pkgrel"
+	provides="rust-src=$pkgver"
 
 	_mv "$pkgdir"/usr/lib/rustlib/src/rust "$subpkgdir"/usr/src/
 	rmdir -p "$pkgdir"/usr/lib/rustlib/src 2>/dev/null || true
@@ -268,6 +275,7 @@ _cargo() {
 	pkgdesc="The Rust package manager"
 	license="Apache-2.0 MIT UNLICENSE"
 	depends="$pkgname=$pkgver-r$pkgrel"
+	provides="cargo=$pkgver"
 
 	_mv "$pkgdir"/usr/bin/cargo "$subpkgdir"/usr/bin/
 }
@@ -276,6 +284,7 @@ _cargo_bashcomp() {
 	pkgdesc="Bash completions for cargo"
 	license="Apache-2.0 MIT"
 	depends=""
+	provides="cargo-bashcomp=$pkgver"
 	install_if="cargo-$_rustver=$pkgver-r$pkgrel bash-completion"
 
 	cd "$pkgdir"
@@ -288,6 +297,7 @@ _cargo_zshcomp() {
 	pkgdesc="ZSH completions for cargo"
 	license="Apache-2.0 MIT"
 	depends=""
+	provides="cargo-zshcomp=$pkgver"
 	install_if="cargo-$_rustver=$pkgver-r$pkgrel zsh"
 
 	cd "$pkgdir"
@@ -299,6 +309,7 @@ _cargo_zshcomp() {
 _cargo_doc() {
 	pkgdesc="The Rust package manager (documentation)"
 	license="Apache-2.0 MIT"
+	provides="cargo-doc=$pkgver"
 	install_if="docs cargo-$_rustver=$pkgver-r$pkgrel"
 
 	# XXX: This is hackish!
