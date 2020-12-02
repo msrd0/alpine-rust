@@ -1,13 +1,11 @@
 use crate::docker::{gen_keys, DockerKeys};
-use futures_util::future;
 use rand::{distributions::Alphanumeric, thread_rng, Rng};
 use serde::{Deserialize, Serialize};
 use ssh2::Session;
 use std::{
 	env,
 	io::{BufRead, BufReader, Write},
-	net::{SocketAddr, TcpStream},
-	sync::Arc
+	net::{SocketAddr, TcpStream}
 };
 use surf::{http::mime::JSON, Body};
 
@@ -169,10 +167,12 @@ pub(super) async fn launch_server() -> surf::Result<UpcloudServer> {
 	info!("Creating Server {}", title);
 	let username = "msrd0";
 	let password = env::var("UPCLOUD_PASSWORD")?;
-	let req = CreateServerRequest::new(title, "alpinerust".to_owned());
+	//let req = CreateServerRequest::new(title, "alpinerust".to_owned());
 	//let server = req.send(username, &password).await?;
 	//let ip = server.ip_addr().ok_or(anyhow::Error::msg("Server does not have an IP"))?;
-	let ip = "94.237.102.87";
+	//let password = server.password();
+	//let uuid = server.uuid();
+	let ip = "94.237.100.228";
 	let password = "REDACTED";
 	let uuid = "";
 

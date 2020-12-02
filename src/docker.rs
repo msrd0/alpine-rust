@@ -1,5 +1,6 @@
 use openssl::{
-	asn1::Asn1Time,
+	asn1::{Asn1Integer, Asn1Time},
+	bn::BigNum,
 	ec::{EcGroup, EcKey},
 	hash::MessageDigest,
 	nid::Nid,
@@ -10,9 +11,20 @@ use openssl::{
 		X509Builder, X509NameBuilder, X509
 	}
 };
+use rand::{distributions::Alphanumeric, thread_rng, Rng};
 use std::path::{Path, PathBuf};
 use tempfile::{tempdir, TempDir};
 use tokio::{fs::File, io::AsyncWriteExt};
+
+fn serial_number() -> anyhow::Result<Asn1Integer> {
+	let hex = thread_rng()
+		.sample_iter(Alphanumeric)
+		.filter(|char| char.is_digit(16))
+		.take(40)
+		.collect::<String>();
+	let bn = BigNum::from_hex_str(&hex)?;
+	Ok(Asn1Integer::from_bn(&bn)?)
+}
 
 async fn write_privkey_pem<T: HasPrivate>(key: &Rsa<T>, path: &Path) -> anyhow::Result<()> {
 	info!("Writing key file {}", path.to_string_lossy());
@@ -51,7 +63,7 @@ impl DockerKeys {
 	}
 }
 
-pub(super) async fn gen_keys(ip: &str, domain: &str) -> anyhow::Result<DockerKeys> {
+pub(super) async fn gen_keys(_ip: &str, domain: &str) -> anyhow::Result<DockerKeys> {
 	info!("Generating Docker Keys");
 
 	let secp384r1 = EcGroup::from_curve_name(Nid::SECP384R1)?;
@@ -85,6 +97,7 @@ pub(super) async fn gen_keys(ip: &str, domain: &str) -> anyhow::Result<DockerKey
 	let ca_keypair = PKey::from_ec_key(ca_key)?;
 
 	let mut ca_cert = X509Builder::new()?;
+	ca_cert.set_serial_number(serial_number()?.as_ref())?;
 	ca_cert.set_not_before(&now)?;
 	ca_cert.set_not_after(&next_week)?;
 	ca_cert.set_version(2)?;
@@ -110,6 +123,7 @@ pub(super) async fn gen_keys(ip: &str, domain: &str) -> anyhow::Result<DockerKey
 	let server_pubkey = PKey::from_ec_key(server_key)?;
 
 	let mut server_cert = X509Builder::new()?;
+	server_cert.set_serial_number(serial_number()?.as_ref())?;
 	server_cert.set_not_before(&now)?;
 	server_cert.set_not_after(&next_week)?;
 	server_cert.set_version(2)?;
@@ -131,6 +145,7 @@ pub(super) async fn gen_keys(ip: &str, domain: &str) -> anyhow::Result<DockerKey
 	let client_pubkey = PKey::from_rsa(client_key)?;
 
 	let mut client_cert = X509Builder::new()?;
+	client_cert.set_serial_number(serial_number()?.as_ref())?;
 	client_cert.set_not_before(&now)?;
 	client_cert.set_not_after(&next_week)?;
 	client_cert.set_version(2)?;
