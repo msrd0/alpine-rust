@@ -147,7 +147,9 @@ async fn main() {
 	}
 
 	// launch an upcloud server
-	let server = upcloud::launch_server().await.expect("Failed to launch UpCloud server");
+	let mut server = upcloud::launch_server(&config, repodir.path())
+		.await
+		.expect("Failed to launch UpCloud server");
 
 	// connect to docker
 	let docker_addr = format!("tcp://{}:8443/", server.domain);
@@ -166,5 +168,8 @@ async fn main() {
 	// update packages
 	for ver in pkg_updates {
 		package::build(repodir.path(), &docker, &config, ver).await;
+		upcloud::commit_changes(&config, ver, repodir.path(), &mut server)
+			.await
+			.expect("Failed to commit changes");
 	}
 }

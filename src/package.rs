@@ -33,11 +33,6 @@ pub(super) async fn up_to_date(repodir: &Path, config: &Config, ver: &APKBUILD) 
 }
 
 pub(super) async fn build(repodir: &Path, docker: &Docker, config: &Config, ver: &APKBUILD) {
-	if up_to_date(repodir, config, ver).await {
-		info!("Rust 1.{} is up to date", ver.rustminor);
-		return;
-	}
-
 	info!("Building Rust 1.{}.{}", ver.rustminor, ver.rustpatch);
 
 	let mut tar_buf: Vec<u8> = Vec::new();
@@ -101,7 +96,7 @@ pub(super) async fn build(repodir: &Path, docker: &Docker, config: &Config, ver:
 	let mut mounts: Vec<Mount> = Vec::new();
 	mounts.push(Mount {
 		target: Some("/repo".to_string()),
-		source: Some(repodir.to_string_lossy().to_string()),
+		source: Some("/var/lib/alpine-rust".to_string()),
 		typ: Some(MountTypeEnum::BIND),
 		read_only: Some(false),
 		..Default::default()
@@ -179,21 +174,4 @@ pub(super) async fn build(repodir: &Path, docker: &Docker, config: &Config, ver:
 		break;
 	}
 	info!("Container {} has stopped", container.id);
-
-	// commit the changes
-	info!("Commiting changes for rust-1.{}", ver.rustminor);
-	let dir = format!("{}/alpine-rust/", config.alpine);
-	let msg = format!("Update rust-1.{} package for alpine {}", ver.rustminor, config.alpine);
-	if !run_git(repodir, &["add", &dir]) {
-		error!("Failed to add files to git");
-		exit(1);
-	}
-	if !run_git(repodir, &["commit", "-m", &msg]) {
-		error!("Failed to create commit");
-		exit(1);
-	}
-	if !run_git(repodir, &["push"]) {
-		error!("Failed to push commit");
-		exit(1);
-	}
 }

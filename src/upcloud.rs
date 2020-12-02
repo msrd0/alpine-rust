@@ -1,15 +1,26 @@
-use crate::docker::{gen_keys, DockerKeys};
+use super::Config;
+use crate::{
+	docker::{gen_keys, DockerKeys},
+	run_git, APKBUILD
+};
+use futures_util::StreamExt;
 use rand::{distributions::Alphanumeric, thread_rng, Rng};
 use serde::{Deserialize, Serialize};
 use ssh2::Session;
 use std::{
+	collections::HashMap,
 	env,
-	io::{BufRead, BufReader, Write},
-	net::{SocketAddr, TcpStream, ToSocketAddrs},
+	io::{BufRead, BufReader, Read, Write},
+	net::{TcpStream, ToSocketAddrs},
+	path::Path,
 	time::Duration
 };
 use surf::{http::mime::JSON, Body};
-use tokio::time::delay_for;
+use tokio::{
+	fs::{self, File},
+	io::{AsyncReadExt, AsyncWriteExt},
+	time::delay_for
+};
 
 #[derive(Serialize)]
 struct CreateServerRequest {
@@ -141,6 +152,41 @@ fn run(sess: &mut Session, cmd: &str) -> anyhow::Result<()> {
 	}
 }
 
+fn index(sess: &mut Session, path: &str) -> anyhow::Result<HashMap<String, String>> {
+	info!("SSH: Indexing {}", path);
+	let mut channel = sess.channel_session()?;
+	let cmd = format!("cd '{}' && sha256sum *", path);
+	channel.exec(&cmd)?;
+
+	let mut index: HashMap<String, String> = HashMap::new();
+	let reader = BufReader::new(&mut channel);
+	for line in reader.lines() {
+		let line = line?;
+		let whitespace = match line.find(|c: char| c.is_whitespace()) {
+			Some(index) => index,
+			None => {
+				warn!("SSH: Skipping unknown line {:?}", line);
+				continue;
+			}
+		};
+		let hash = line[0..whitespace].trim();
+		let name = line[whitespace..].trim();
+		index.insert(name.to_owned(), hash.to_owned());
+	}
+
+	channel.wait_close()?;
+	let exit_code = channel.exit_status()?;
+	info!("SSH: Command completed with exit code {}", exit_code);
+	if exit_code == 0 {
+		Ok(index)
+	} else {
+		Err(anyhow::Error::msg(format!(
+			"Command `{}` returned exit-code {}",
+			cmd, exit_code
+		)))
+	}
+}
+
 fn send(sess: &mut Session, path: &str, data: &[u8]) -> anyhow::Result<()> {
 	info!("SSH: Uploading {}", path);
 	let mut file = sess.scp_send(path.as_ref(), 0o600, data.len() as u64, None)?;
@@ -154,14 +200,61 @@ fn send(sess: &mut Session, path: &str, data: &[u8]) -> anyhow::Result<()> {
 	Ok(())
 }
 
+async fn upload(sess: &mut Session, path: &str, host: &Path) -> anyhow::Result<()> {
+	info!("SSH: Uploading {}", path);
+	let mut host = File::open(host).await?;
+	let mut file = sess.scp_send(path.as_ref(), 0o600, host.metadata().await?.len(), None)?;
+
+	let mut buf = [0u8; 8192];
+	loop {
+		let count = host.read(&mut buf).await?;
+		if count == 0 {
+			break;
+		}
+		file.write(&buf[0..count])?;
+	}
+
+	file.send_eof()?;
+	file.wait_eof()?;
+	file.close()?;
+	file.wait_close()?;
+
+	Ok(())
+}
+
+async fn download(sess: &mut Session, path: &str, host: &Path) -> anyhow::Result<()> {
+	info!("SSH: Downloading {}", path);
+	let mut host = File::create(host).await?;
+	let (mut file, _) = sess.scp_recv(path.as_ref())?;
+
+	let mut buf = [0u8; 8192];
+	loop {
+		let count = file.read(&mut buf)?;
+		if count == 0 {
+			break;
+		}
+		host.write(&buf[0..count]).await?;
+	}
+
+	file.send_eof()?;
+	file.wait_eof()?;
+	file.close()?;
+	file.wait_close()?;
+
+	Ok(())
+}
+
 pub(super) struct UpcloudServer {
 	pub(super) ip: String,
 	pub(super) domain: String,
+	password: String,
 	uuid: String,
-	pub(super) keys: DockerKeys
+	pub(super) keys: DockerKeys,
+	repo_dir: String,
+	repo_index: HashMap<String, String>
 }
 
-pub(super) async fn launch_server() -> surf::Result<UpcloudServer> {
+pub(super) async fn launch_server(config: &Config, repodir: &Path) -> surf::Result<UpcloudServer> {
 	let rng = thread_rng();
 	let hostname = rng.sample_iter(Alphanumeric).take(10).collect::<String>();
 	let title = format!("alpine-rust-{}", hostname);
@@ -174,7 +267,7 @@ pub(super) async fn launch_server() -> surf::Result<UpcloudServer> {
 	//let ip = server.ip_addr().ok_or(anyhow::Error::msg("Server does not have an IP"))?;
 	//let password = server.password();
 	//let uuid = server.uuid();
-	let ip = "94.237.100.228";
+	let ip = "94.237.97.225";
 	let password = "REDACTED";
 	let uuid = "";
 
@@ -191,6 +284,9 @@ pub(super) async fn launch_server() -> surf::Result<UpcloudServer> {
 			break;
 		}
 	}
+
+	// wait some more for the ssh server
+	delay_for(Duration::new(5, 0)).await;
 
 	// open an SSH connection
 	info!("Connecting to {}:22", domain);
@@ -228,12 +324,97 @@ pub(super) async fn launch_server() -> surf::Result<UpcloudServer> {
 	run(&mut sess, "systemctl daemon-reload")?;
 	run(&mut sess, "systemctl enable --now docker-tlsverify")?;
 
+	// upload the repository content
+	let dir = format!("/var/lib/alpine-rust/{}/alpine-rust/x86_64", config.alpine);
+	run(&mut sess, &format!("mkdir -p {}", dir))?;
+	let mut entries = fs::read_dir(repodir.join(format!("{}/alpine-rust/x86_64", config.alpine))).await?;
+	while let Some(entry) = entries.next().await {
+		let entry = entry?;
+		upload(
+			&mut sess,
+			&format!("{}/{}", dir, entry.file_name().to_string_lossy()),
+			&entry.path()
+		)
+		.await?;
+	}
+	run(&mut sess, "chmod -R o+w /var/lib/alpine-rust")?;
+
+	// index the repository
+	let repo_index = index(&mut sess, &dir)?;
+	info!("Index: {:?}", repo_index);
+
 	Ok(UpcloudServer {
 		ip: ip.to_owned(),
 		domain,
+		password: password.to_owned(),
 		uuid: uuid.to_owned(),
-		keys
+		keys,
+		repo_dir: dir,
+		repo_index
 	})
+}
+
+pub(super) async fn commit_changes(
+	config: &Config,
+	ver: &APKBUILD,
+	repodir: &Path,
+	server: &mut UpcloudServer
+) -> anyhow::Result<()> {
+	// establish a new ssh session
+	info!("Connecting to {}:22", server.domain);
+	let addr = (server.domain.as_ref(), 22).to_socket_addrs()?.next().unwrap();
+	let tcp = TcpStream::connect(addr)?;
+	let mut sess = Session::new()?;
+	sess.set_tcp_stream(tcp);
+	sess.handshake()?;
+	sess.userauth_password("root", &server.password)?;
+
+	// pull the current index
+	let dir = format!("/var/lib/alpine-rust/{}/alpine-rust/x86_64", config.alpine);
+	let new_index = index(&mut sess, &dir)?;
+
+	// get all updated files - the build will never delete files
+	let updated = new_index
+		.into_iter()
+		.filter(|(file, hash)| server.repo_index.get(file.as_str()) != Some(&hash))
+		.map(|(file, _)| file)
+		.collect::<Vec<_>>();
+	if updated.is_empty() {
+		info!("No changes to commit");
+		return Ok(());
+	}
+
+	// download those files and add them to git
+	let mut err: Option<&'static str> = None;
+	for file in &updated {
+		download(
+			&mut sess,
+			&format!("{}/{}", dir, file),
+			&repodir.join(format!("{}/alpine-rust/x86_64/{}", config.alpine, file))
+		)
+		.await?;
+		if !run_git(repodir, &["add", &format!("{}/alpine-rust/x86_64/{}", config.alpine, file)]) {
+			error!("Unable to add {} to git", file);
+			err = Some("Unable to add files to git");
+		}
+	}
+
+	// create the commit
+	info!("Commiting changes for rust-1.{}", ver.rustminor);
+	let msg = format!("Update rust-1.{} package for alpine {}", ver.rustminor, config.alpine);
+	if !run_git(repodir, &["commit", "-m", &msg]) {
+		error!("Failed to create commit");
+		err = Some("Failed to create commit");
+	}
+	if !run_git(repodir, &["push"]) {
+		error!("Failed to push commit");
+		err = Some("Failed to push commit");
+	}
+
+	if let Some(err) = err {
+		return Err(anyhow::Error::msg(err));
+	}
+	Ok(())
 }
 
 const DOCKER_SYSTEMD_UNIT: &str = r#"
