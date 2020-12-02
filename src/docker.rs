@@ -9,7 +9,7 @@ use openssl::{
 		X509Builder, X509NameBuilder, X509
 	}
 };
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use tempfile::{tempdir, TempDir};
 use tokio::{fs::File, io::AsyncWriteExt};
 
@@ -36,10 +36,22 @@ pub(super) struct DockerKeys {
 	pub(super) server_key_pem: Vec<u8>
 }
 
-pub(super) async fn gen_keys() -> anyhow::Result<DockerKeys> {
+impl DockerKeys {
+	pub(super) fn ca_path(&self) -> PathBuf {
+		self.tmpdir.path().join("ca.pem")
+	}
+
+	pub(super) fn client_key_path(&self) -> PathBuf {
+		self.tmpdir.path().join("client-key.pem")
+	}
+
+	pub(super) fn client_cert_path(&self) -> PathBuf {
+		self.tmpdir.path().join("client.pem")
+	}
+}
+
+pub(super) async fn gen_keys(ip: &str, domain: &str) -> anyhow::Result<DockerKeys> {
 	info!("Generating Docker Keys");
-	let domain = "thisdoesnotexist.org";
-	let ip = "127.0.0.1";
 
 	let secp384r1 = EcGroup::from_curve_name(Nid::SECP384R1)?;
 	let sha256 = MessageDigest::from_nid(Nid::SHA256).ok_or(anyhow::Error::msg("SHA256 unknown to openssl"))?;
@@ -57,7 +69,6 @@ pub(super) async fn gen_keys() -> anyhow::Result<DockerKeys> {
 	let next_week = Asn1Time::days_from_now(7)?;
 
 	let ca_key = EcKey::generate(&secp384r1)?;
-	write_privkey_pem(&ca_key, &dir.join("ca-key.pem")).await?;
 	let ca_pubkey = PKey::from_ec_key(EcKey::from_public_key(&secp384r1, ca_key.public_key())?)?;
 	let ca_privkey = PKey::from_ec_key(ca_key)?;
 
@@ -82,7 +93,6 @@ pub(super) async fn gen_keys() -> anyhow::Result<DockerKeys> {
 
 	let server_key = EcKey::generate(&secp384r1)?;
 	let server_key_pem = server_key.private_key_to_pem()?;
-	write_privkey_pem(&server_key, &dir.join("server-key.pem")).await?;
 	let server_pubkey = PKey::from_ec_key(EcKey::from_public_key(&secp384r1, server_key.public_key())?)?;
 
 	let mut server_cert = X509Builder::new()?;
@@ -100,7 +110,6 @@ pub(super) async fn gen_keys() -> anyhow::Result<DockerKeys> {
 	server_cert.sign(&ca_privkey, sha256)?;
 	let server_cert = server_cert.build();
 	let server_cert_pem = server_cert.to_pem()?;
-	write_x509_pem(&server_cert, &dir.join("server.pem")).await?;
 
 	let client_key = EcKey::generate(&secp384r1)?;
 	write_privkey_pem(&client_key, &dir.join("client-key.pem")).await?;

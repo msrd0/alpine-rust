@@ -4,7 +4,7 @@ extern crate lazy_static;
 extern crate log;
 
 use askama::Template;
-use bollard::Docker;
+use bollard::{Docker, API_DEFAULT_VERSION};
 use futures_util::{stream, FutureExt, StreamExt};
 use serde::Deserialize;
 use std::{
@@ -148,13 +148,23 @@ async fn main() {
 		}
 	*/
 
-	// generate docker keys
-	let keys = docker::gen_keys().await.expect("Failed to generate docker keys");
-
 	// launch an upcloud server
-	upcloud::launch_server(&keys.ca_pem, &keys.server_cert_pem, &keys.server_key_pem)
-		.await
-		.expect("Failed to launch UpCloud server");
+	let server = upcloud::launch_server().await.expect("Failed to launch UpCloud server");
+
+	// connect to docker
+	let docker_addr = format!("tcp://{}:8443/", server.domain);
+	info!("Connecting to {}", docker_addr);
+	let docker = Docker::connect_with_ssl(
+		&docker_addr,
+		&server.keys.client_key_path(),
+		&server.keys.client_cert_path(),
+		&server.keys.ca_path(),
+		120,
+		API_DEFAULT_VERSION
+	)
+	.expect("Failed to connect to docker");
+	docker.ping().await.expect("Failed to ping docker");
+	info!("Connected to {}", docker_addr);
 
 	/*
 		// connect to docker

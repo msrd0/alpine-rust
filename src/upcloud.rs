@@ -1,3 +1,4 @@
+use crate::docker::{gen_keys, DockerKeys};
 use futures_util::future;
 use rand::{distributions::Alphanumeric, thread_rng, Rng};
 use serde::{Deserialize, Serialize};
@@ -153,7 +154,14 @@ fn send(sess: &mut Session, path: &str, data: &[u8]) -> anyhow::Result<()> {
 	Ok(())
 }
 
-pub(super) async fn launch_server(ca_pem: &[u8], cert_pem: &[u8], key_pem: &[u8]) -> surf::Result<()> {
+pub(super) struct UpcloudServer {
+	pub(super) ip: String,
+	pub(super) domain: String,
+	uuid: String,
+	pub(super) keys: DockerKeys
+}
+
+pub(super) async fn launch_server() -> surf::Result<UpcloudServer> {
 	let rng = thread_rng();
 	let hostname = rng.sample_iter(Alphanumeric).take(10).collect::<String>();
 	let title = format!("alpine-rust-{}", hostname);
@@ -166,6 +174,10 @@ pub(super) async fn launch_server(ca_pem: &[u8], cert_pem: &[u8], key_pem: &[u8]
 	//let ip = server.ip_addr().ok_or(anyhow::Error::msg("Server does not have an IP"))?;
 	let ip = "94.237.102.87";
 	let password = "REDACTED";
+	let uuid = "";
+
+	// rustls doesn't support ip's, so we need to guess a dns name
+	let domain = format!("{}.de-fra1.upcloud.host", ip.split('.').collect::<Vec<_>>().join("-"));
 
 	let tcp = TcpStream::connect(format!("{}:22", ip).parse::<SocketAddr>()?)?;
 	let mut sess = Session::new()?;
@@ -186,10 +198,11 @@ pub(super) async fn launch_server(ca_pem: &[u8], cert_pem: &[u8], key_pem: &[u8]
 	run(&mut sess, "systemctl disable --now docker")?;
 
 	// upload the certificates
+	let keys = gen_keys(ip, &domain).await?;
 	run(&mut sess, "mkdir -p /etc/docker-certs")?;
-	send(&mut sess, "/etc/docker-certs/ca.pem", ca_pem)?;
-	send(&mut sess, "/etc/docker-certs/cert.pem", cert_pem)?;
-	send(&mut sess, "/etc/docker-certs/key.pem", key_pem)?;
+	send(&mut sess, "/etc/docker-certs/ca.pem", &keys.ca_pem)?;
+	send(&mut sess, "/etc/docker-certs/cert.pem", &keys.server_cert_pem)?;
+	send(&mut sess, "/etc/docker-certs/key.pem", &keys.server_key_pem)?;
 
 	// install the new docker systemd unit
 	send(
@@ -200,7 +213,12 @@ pub(super) async fn launch_server(ca_pem: &[u8], cert_pem: &[u8], key_pem: &[u8]
 	run(&mut sess, "systemctl daemon-reload")?;
 	run(&mut sess, "systemctl enable --now docker-tlsverify")?;
 
-	Ok(())
+	Ok(UpcloudServer {
+		ip: ip.to_owned(),
+		domain,
+		uuid: uuid.to_owned(),
+		keys
+	})
 }
 
 const DOCKER_SYSTEMD_UNIT: &str = r#"
@@ -217,8 +235,8 @@ Type=notify
 # the default is not to use systemd for cgroups because the delegate issues still
 # exists and systemd currently does not support the cgroup feature set required
 # for containers run by docker
-ExecStart=/usr/bin/dockerd --tlsverify --tlscacert=/etc/docker-certs/ca.pem --tlscert=/etc/docker-certs/cert.pem --tlskey=/etc/docker-certs/key.pem -H=0.0.0.0:2376 --containerd=/run/containerd/containerd.sock
-ExecReload=/bin/kill -s HUP \$MAINPID
+ExecStart=/usr/bin/dockerd --tlsverify --tlscacert=/etc/docker-certs/ca.pem --tlscert=/etc/docker-certs/cert.pem --tlskey=/etc/docker-certs/key.pem -H=0.0.0.0:8443 --containerd=/run/containerd/containerd.sock
+ExecReload=/bin/kill -s HUP $MAINPID
 TimeoutSec=0
 RestartSec=2
 Restart=always
