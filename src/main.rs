@@ -5,9 +5,11 @@ extern crate log;
 
 use askama::Template;
 use bollard::{Docker, API_DEFAULT_VERSION};
+use env::current_dir;
 use futures_util::{stream, FutureExt, StreamExt};
 use serde::Deserialize;
 use std::{
+	borrow::Cow,
 	env,
 	path::Path,
 	process::{exit, Command}
@@ -72,6 +74,7 @@ fn tar_header(path: &str, len: usize) -> tar::Header {
 }
 
 lazy_static! {
+	static ref CI: bool = env::var("CI").is_ok();
 	static ref GITHUB_TOKEN: String = env::var("GITHUB_TOKEN").expect("GITHUB_TOKEN must be set");
 }
 
@@ -128,14 +131,21 @@ async fn main() {
 	let config: Config = toml::from_slice(&config_buf).expect("Invalid syntax in versions.toml");
 
 	// clone the git repo
-	let repodir = git_clone();
+	let (_repotmpdir, repodir) = if *CI {
+		let dir = git_clone();
+		let path = dir.path().to_owned();
+		(Some(dir), path)
+	} else {
+		let dir = current_dir().unwrap().join("repo");
+		(None, dir)
+	};
 
 	// update the metadata
-	metadata::update(&config, repodir.path()).await;
+	metadata::update(&config, &repodir).await;
 
 	// search for versions that need to be updated
 	let pkg_updates = stream::iter(config.versions.iter())
-		.filter(|ver| package::up_to_date(repodir.path(), &config, ver).map(|up_to_date| !up_to_date))
+		.filter(|ver| package::up_to_date(&repodir, &config, ver).map(|up_to_date| !up_to_date))
 		.collect::<Vec<_>>()
 		.await;
 
@@ -145,33 +155,56 @@ async fn main() {
 		return;
 	}
 
-	// launch an upcloud server
-	let mut server = upcloud::launch_server(&config, repodir.path())
-		.await
-		.expect("Failed to launch UpCloud server");
+	// upcloud for CI, local for non-CI
+	let (mut server, docker) = if *CI {
+		// launch an upcloud server
+		let server = upcloud::launch_server(&config, &repodir)
+			.await
+			.expect("Failed to launch UpCloud server");
 
-	// connect to docker
-	let docker_addr = format!("tcp://{}:8443/", server.domain);
-	info!("Connecting to {}", docker_addr);
-	let docker = Docker::connect_with_ssl(
-		&docker_addr,
-		&server.keys.client_key_path(),
-		&server.keys.client_cert_path(),
-		&server.keys.ca_path(),
-		120,
-		API_DEFAULT_VERSION
-	)
-	.expect("Failed to connect to docker");
-	info!("Connected to {}", docker_addr);
+		let docker_addr = format!("tcp://{}:8443/", server.domain);
+		info!("Connecting to {}", docker_addr);
+		let docker = Docker::connect_with_ssl(
+			&docker_addr,
+			&server.keys.client_key_path(),
+			&server.keys.client_cert_path(),
+			&server.keys.ca_path(),
+			120,
+			API_DEFAULT_VERSION
+		)
+		.expect("Failed to connect to docker");
+		info!("Connected to {}", docker_addr);
+
+		(Some(server), docker)
+	} else {
+		info!("Connecting to local docker daemon");
+		let docker = Docker::connect_with_local_defaults().expect("Failed to connect to docker");
+		(None, docker)
+	};
 
 	// update packages
 	for ver in pkg_updates {
-		package::build(&docker, &config, ver).await;
-		upcloud::commit_changes(&config, ver, repodir.path(), &mut server)
-			.await
-			.expect("Failed to commit changes");
+		// build the package
+		{
+			let repodir = match &server {
+				Some(_) => Cow::Borrowed("/var/lib/alpine-rust"),
+				None => current_dir().unwrap().join("repo").to_string_lossy().to_string().into()
+			};
+			package::build(&repodir, &docker, &config, ver).await;
+		}
+
+		// commit the changes
+		if let Some(mut server) = server.as_mut() {
+			upcloud::commit_changes(&config, ver, &repodir, &mut server)
+				.await
+				.expect("Failed to commit changes");
+		} else {
+			warn!("Not running in CI - No changes commited");
+		}
 	}
 
 	// remove the server
-	server.destroy().await.expect("Failed to destroy the server");
+	if let Some(server) = server {
+		server.destroy().await.expect("Failed to destroy the server");
+	}
 }

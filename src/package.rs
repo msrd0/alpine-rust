@@ -32,7 +32,7 @@ pub(super) async fn up_to_date(repodir: &Path, config: &Config, ver: &APKBUILD) 
 	}
 }
 
-pub(super) async fn build(docker: &Docker, config: &Config, ver: &APKBUILD) {
+pub(super) async fn build(repodir: &str, docker: &Docker, config: &Config, ver: &APKBUILD) {
 	info!("Building Rust 1.{}.{}", ver.rustminor, ver.rustpatch);
 
 	let mut tar_buf: Vec<u8> = Vec::new();
@@ -96,7 +96,7 @@ pub(super) async fn build(docker: &Docker, config: &Config, ver: &APKBUILD) {
 	let mut mounts: Vec<Mount> = Vec::new();
 	mounts.push(Mount {
 		target: Some("/repo".to_string()),
-		source: Some("/var/lib/alpine-rust".to_string()),
+		source: Some(repodir.to_string()),
 		typ: Some(MountTypeEnum::BIND),
 		read_only: Some(false),
 		..Default::default()
