@@ -50,8 +50,13 @@ struct CreateServer<'a> {
 	timezone: &'a str,
 	password_delivery: &'a str,
 	firewall: &'a str,
-	interfaces: Interfaces<'a>,
+	networking: Networking<'a>,
 	storage_devices: StorageDevices<'a>
+}
+
+#[derive(Serialize)]
+struct Networking<'a> {
+	interfaces: Interfaces<'a>
 }
 
 #[derive(Serialize)]
@@ -146,29 +151,31 @@ impl<'a> CreateServerRequest<'a> {
 				timezone: "Europe/Berlin",
 				password_delivery: "none",
 				firewall: "off",
-				interfaces: Interfaces {
-					interface: vec![
-						Interface {
-							ip_addresses: IpAddresses {
-								ip_address: vec![IpAddress {
-									access: String::new(),
-									address: String::new(),
-									family: IpFamily::IPv4
-								}]
+				networking: Networking {
+					interfaces: Interfaces {
+						interface: vec![
+							Interface {
+								ip_addresses: IpAddresses {
+									ip_address: vec![IpAddress {
+										access: String::new(),
+										address: String::new(),
+										family: IpFamily::IPv4
+									}]
+								},
+								ty: "utility"
 							},
-							ty: "utility"
-						},
-						Interface {
-							ip_addresses: IpAddresses {
-								ip_address: vec![IpAddress {
-									access: String::new(),
-									address: String::new(),
-									family: IpFamily::IPv6
-								}]
+							Interface {
+								ip_addresses: IpAddresses {
+									ip_address: vec![IpAddress {
+										access: String::new(),
+										address: String::new(),
+										family: IpFamily::IPv6
+									}]
+								},
+								ty: "public"
 							},
-							ty: "public"
-						},
-					]
+						]
+					}
 				},
 				storage_devices: StorageDevices {
 					storage_device: vec![StorageDevice {
@@ -191,7 +198,7 @@ impl<'a> CreateServerRequest<'a> {
 			.body(Body::from_json(self)?)
 			.recv_json()
 			.await?;
-		info!("Response: {:?}", value);
+		debug!("Response: {:?}", value);
 		Ok(serde_json::from_value(value)?)
 	}
 }
@@ -225,7 +232,7 @@ impl StopServerRequest {
 			.body(Body::from_json(self)?)
 			.recv_json()
 			.await?;
-		info!("Response: {:?}", value);
+		debug!("Response: {:?}", value);
 		Ok(value)
 	}
 }
@@ -247,7 +254,7 @@ impl DeleteServerRequest {
 			.header("authorization", format!("Basic {}", base64::encode(auth.as_bytes())))
 			.recv_bytes()
 			.await?;
-		info!("Response: {:?}", bytes);
+		debug!("Response: {:?}", bytes);
 		Ok(())
 	}
 }
