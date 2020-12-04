@@ -22,9 +22,11 @@ use tokio::{
 	time::delay_for
 };
 
-// 12 cores was just above 1h so 14 cores should compile within 1h
-pub const UPCLOUD_CORES: u16 = 14;
-pub const UPCLOUD_MEMORY: u16 = 12 * 1024;
+// using 8 cores for now - 10 cores took 1h 13min, very marginal improvements above 10 cores
+pub const UPCLOUD_CORES: u16 = 8;
+// compiling rust doesn't take much memory so we'll stick with 1G per core
+pub const UPCLOUD_MEMORY: u16 = 8 * 1024;
+// the OS comes in at about 3G and compiling rust doesn't take much so 15G should be plenty
 pub const UPCLOUD_STORAGE: u16 = 15;
 
 #[derive(Serialize)]
