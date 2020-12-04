@@ -29,34 +29,55 @@ pub const UPCLOUD_MEMORY: u16 = 8 * 1024;
 // the OS comes in at about 3G and compiling rust doesn't take much so 15G should be plenty
 pub const UPCLOUD_STORAGE: u16 = 15;
 
-#[derive(Serialize)]
-struct CreateServerRequest {
-	server: CreateServer
+lazy_static! {
+	static ref UPCLOUD_CORES_STR: String = UPCLOUD_CORES.to_string();
+	static ref UPCLOUD_MEMORY_STR: String = UPCLOUD_MEMORY.to_string();
 }
 
 #[derive(Serialize)]
-struct CreateServer {
-	title: String,
-	hostname: String,
-	plan: String,
-	core_number: String,
-	memory_amount: String,
-	zone: String,
-	storage_devices: StorageDevices
+struct CreateServerRequest<'a> {
+	server: CreateServer<'a>
 }
 
 #[derive(Serialize)]
-struct StorageDevices {
-	storage_device: Vec<StorageDevice>
+struct CreateServer<'a> {
+	title: &'a str,
+	hostname: &'a str,
+	plan: &'a str,
+	core_number: u16,
+	memory_amount: u16,
+	zone: &'a str,
+	timezone: &'a str,
+	password_delivery: &'a str,
+	firewall: &'a str,
+	interfaces: Interfaces<'a>,
+	storage_devices: StorageDevices<'a>
 }
 
 #[derive(Serialize)]
-struct StorageDevice {
-	action: String,
-	storage: String,
+struct Interfaces<'a> {
+	interface: Vec<Interface<'a>>
+}
+
+#[derive(Serialize)]
+struct Interface<'a> {
+	ip_addresses: IpAddresses,
+	#[serde(rename = "type")]
+	ty: &'a str
+}
+
+#[derive(Serialize)]
+struct StorageDevices<'a> {
+	storage_device: Vec<StorageDevice<'a>>
+}
+
+#[derive(Serialize)]
+struct StorageDevice<'a> {
+	action: &'a str,
+	storage: &'a str,
 	title: String,
 	size: u16,
-	tier: String
+	tier: &'a str
 }
 
 #[derive(Deserialize)]
@@ -71,16 +92,24 @@ struct Server {
 	uuid: String
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Serialize)]
 struct IpAddresses {
 	ip_address: Vec<IpAddress>
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Serialize)]
 struct IpAddress {
+	#[serde(skip_serializing)]
 	access: String,
+	#[serde(skip_serializing)]
 	address: String,
-	family: String
+	family: IpFamily
+}
+
+#[derive(Deserialize, PartialEq, Serialize)]
+enum IpFamily {
+	IPv4,
+	IPv6
 }
 
 impl ServerResponse {
@@ -89,7 +118,7 @@ impl ServerResponse {
 			.ip_addresses
 			.ip_address
 			.iter()
-			.filter(|addr| addr.access == "public" && addr.family == "IPv4")
+			.filter(|addr| addr.access == "public" && addr.family == IpFamily::IPv6)
 			.map(|addr| addr.address.as_ref())
 			.next()
 	}
@@ -103,24 +132,51 @@ impl ServerResponse {
 	}
 }
 
-impl CreateServerRequest {
-	fn new(title: String, hostname: String) -> Self {
+impl<'a> CreateServerRequest<'a> {
+	fn new(title: &'a str, hostname: &'a str) -> Self {
 		let storage_title = format!("{} (Debian Buster)", title);
 		Self {
 			server: CreateServer {
 				title,
 				hostname,
-				plan: "custom".to_owned(),
-				core_number: UPCLOUD_CORES.to_string(),
-				memory_amount: UPCLOUD_MEMORY.to_string(),
-				zone: "de-fra1".to_owned(),
+				plan: "custom",
+				core_number: UPCLOUD_CORES,
+				memory_amount: UPCLOUD_MEMORY,
+				zone: "de-fra1",
+				timezone: "Europe/Berlin",
+				password_delivery: "none",
+				firewall: "off",
+				interfaces: Interfaces {
+					interface: vec![
+						Interface {
+							ip_addresses: IpAddresses {
+								ip_address: vec![IpAddress {
+									access: String::new(),
+									address: String::new(),
+									family: IpFamily::IPv4
+								}]
+							},
+							ty: "utility"
+						},
+						Interface {
+							ip_addresses: IpAddresses {
+								ip_address: vec![IpAddress {
+									access: String::new(),
+									address: String::new(),
+									family: IpFamily::IPv6
+								}]
+							},
+							ty: "public"
+						},
+					]
+				},
 				storage_devices: StorageDevices {
 					storage_device: vec![StorageDevice {
-						action: "clone".to_owned(),
-						storage: "01000000-0000-4000-8000-000020050100".to_owned(),
+						action: "clone",
+						storage: "01000000-0000-4000-8000-000020050100",
 						title: storage_title,
 						size: UPCLOUD_STORAGE,
-						tier: "maxiops".to_owned()
+						tier: "maxiops"
 					}]
 				}
 			}
@@ -365,6 +421,17 @@ impl UpcloudServer {
 	}
 }
 
+fn ip_last_parts(ip: &str) -> String {
+	let mut parts = [""; 4];
+	for part in ip.split(":") {
+		parts[0] = parts[1];
+		parts[1] = parts[2];
+		parts[2] = parts[3];
+		parts[3] = part;
+	}
+	parts.join("-")
+}
+
 pub(super) async fn launch_server(config: &Config, repodir: &Path) -> surf::Result<UpcloudServer> {
 	let rng = thread_rng();
 	let hostname = rng.sample_iter(Alphanumeric).take(10).collect::<String>();
@@ -373,14 +440,14 @@ pub(super) async fn launch_server(config: &Config, repodir: &Path) -> surf::Resu
 	info!("Creating Server {}", title);
 	let username = "msrd0";
 	let password = env::var("UPCLOUD_PASSWORD")?;
-	let req = CreateServerRequest::new(title, "alpinerust".to_owned());
+	let req = CreateServerRequest::new(&title, "alpinerust");
 	let server = req.send(username, &password).await?;
 	let ip = server.ip_addr().ok_or(anyhow::Error::msg("Server does not have an IP"))?;
 	let password = server.password();
 	let uuid = server.uuid();
 
 	// rustls doesn't support ip's, so we need to guess a dns name
-	let domain = format!("{}.de-fra1.upcloud.host", ip.split('.').collect::<Vec<_>>().join("-"));
+	let domain = format!("{}.v6.de-fra1.upcloud.host", ip_last_parts(ip));
 
 	// wait for the server and domain to be set up
 	delay_for(Duration::new(10, 0)).await;
