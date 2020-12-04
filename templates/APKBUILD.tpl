@@ -6,7 +6,6 @@
 # Contributor: Shiz <hi@shiz.me>
 # Contributor: Jeizsm <jeizsm@gmail.com>
 # Maintainer: Dominic Meiser <alpine@msrd0.de>
-_aportsha={{ aportsha }}
 _rustver=1.{{ rustminor }}
 pkgname=rust-$_rustver
 pkgver=$_rustver.{{ rustpatch }}
@@ -64,19 +63,9 @@ subpackages="
 	cargo-$_rustver-zsh-completion:_cargo_zshcomp:noarch
 	cargo-$_rustver-doc:_cargo_doc:noarch
 	"
-source="https://static.rust-lang.org/dist/rustc-$pkgver-src.tar.gz
-	https://gitlab.alpinelinux.org/alpine/aports/-/raw/$_aportsha/community/rust/musl-fix-linux_musl_base.patch
-	https://gitlab.alpinelinux.org/alpine/aports/-/raw/$_aportsha/community/rust/need-rpath.patch
-	https://gitlab.alpinelinux.org/alpine/aports/-/raw/$_aportsha/community/rust/need-ssp_nonshared.patch
-	https://gitlab.alpinelinux.org/alpine/aports/-/raw/$_aportsha/community/rust/alpine-move-py-scripts-to-share.patch
-	https://gitlab.alpinelinux.org/alpine/aports/-/raw/$_aportsha/community/rust/alpine-target.patch
-	https://gitlab.alpinelinux.org/alpine/aports/-/raw/$_aportsha/community/rust/install-template-shebang.patch
-	https://gitlab.alpinelinux.org/alpine/aports/-/raw/$_aportsha/community/rust/check-rustc
-	https://gitlab.alpinelinux.org/alpine/aports/-/raw/$_aportsha/community/rust/link-musl-dynamically.patch
-	https://gitlab.alpinelinux.org/alpine/aports/-/raw/$_aportsha/community/rust/musl-dont-use-crt-static.patch
-	https://gitlab.alpinelinux.org/alpine/aports/-/raw/$_aportsha/community/rust/0006-Prefer-libgcc_eh-over-libunwind-for-musl.patch
-	{% if rustminor <= 44 %}https://gitlab.alpinelinux.org/alpine/aports/-/raw/$_aportsha/community/rust/static-pie.patch{% endif %}
-	{% if rustminor <= 44 %}https://gitlab.alpinelinux.org/alpine/aports/-/raw/$_aportsha/community/rust/musl-fix-static-linking.patch{% endif %}
+source="
+	https://static.rust-lang.org/dist/rustc-$pkgver-src.tar.gz
+	https://github.com/msrd0/alpine-rust/archive/patches/$_rustver.tar.gz
 "
 builddir="$srcdir/rustc-$pkgver-src"
 
@@ -110,11 +99,8 @@ _clear_vendor_checksums() {
 }
 
 prepare() {
-	#default_prepare
-
-	# patches don't contain the correct prefix directory so we need
-	# to patch them ourselves
-	for file in $(ls ../*.patch | sort)
+	# manual patching due to non-standard directory structure
+	for file in $(ls $srcdir/alpine-rust-patches-$_rustver/patches-$_rustver/*.patch | sort)
 	do
 		echo " -> Applying patch $file"
 		patch -N -p 1 -i $file

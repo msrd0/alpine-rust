@@ -28,7 +28,6 @@ struct APKBUILD {
 	pkgrel: u32,
 	bootver: String,
 	bootsys: bool,
-	aportsha: String,
 	sha512sums: String
 }
 
