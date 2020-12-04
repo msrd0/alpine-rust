@@ -5,6 +5,17 @@ pubkey = "alpine@msrd0.de-5fc3c0b2.rsa.pub"
 # NOTE: always put rust versions in ascending order to ensure that the previous rust compiler can be used to compile
 # the latest one since the system rust will likely be too old to compile the latest rust compiler.
 
+[[versions]]
+rustminor = 44
+rustpatch = 1
+pkgrel = 1
+bootver = "1.44.0"
+bootsys = true
+sha512sums = """
+f6b719a2a63aa96a192a098f58ff1042251cee96a1ff742ecb09d5b88fe5be79bc7023f118e0a6c0d46aa1c819ff77274ab669668f8e53efa4eb5e3041227928  rustc-1.44.1-src.tar.gz
+5082973ffe9a383af38ca616fcaff58fe6bc1bb172f905b6010972095a43edd09829bc19d96176edf8e4bc27aea02d1a873be79f83f034ecc9a3e33e828fbcb7  1.44.tar.gz
+"""
+
 # 1.45.2
 [[versions]]
 rustminor = 45
