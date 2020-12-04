@@ -171,8 +171,15 @@ async fn main() {
 			&server.keys.ca_path(),
 			120,
 			API_DEFAULT_VERSION
-		)
-		.expect("Failed to connect to docker");
+		);
+		let docker = match docker {
+			Ok(docker) => docker,
+			Err(err) => {
+				error!("Failed to connect to docker: {}", err);
+				server.destroy().await.expect("Failed to destroy the server");
+				exit(1);
+			}
+		};
 		info!("Connected to {}", docker_addr);
 
 		(Some(server), docker)
@@ -190,14 +197,22 @@ async fn main() {
 				Some(_) => Cow::Borrowed("/var/lib/alpine-rust"),
 				None => current_dir().unwrap().join("repo").to_string_lossy().to_string().into()
 			};
-			package::build(&repodir, &docker, &config, ver).await;
+			if let Err(err) = package::build(&repodir, &docker, &config, ver).await {
+				error!("Failed to build package: {}", err);
+				if let Some(server) = server {
+					server.destroy().await.expect("Failed to destroy the server");
+				}
+				exit(1);
+			}
 		}
 
 		// commit the changes
 		if let Some(mut server) = server.as_mut() {
-			upcloud::commit_changes(&config, ver, &repodir, &mut server)
-				.await
-				.expect("Failed to commit changes");
+			if let Err(err) = upcloud::commit_changes(&config, ver, &repodir, &mut server).await {
+				error!("Failed to commit changes: {}", err);
+				server.destroy().await.expect("Failed to destroy the server");
+				exit(1);
+			}
 		} else {
 			warn!("Not running in CI - No changes commited");
 		}

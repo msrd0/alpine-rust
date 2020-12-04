@@ -27,12 +27,13 @@ pub(super) async fn up_to_date(repodir: &Path, config: &Config, ver: &APKBUILD) 
 		Err(err) => {
 			// other i/o error
 			error!("Unable to check if package was up to date: {}", err);
+			// exiting is fine because no upcloud server was provisioned yet
 			exit(1);
 		}
 	}
 }
 
-pub(super) async fn build(repodir: &str, docker: &Docker, config: &Config, ver: &APKBUILD) {
+pub(super) async fn build(repodir: &str, docker: &Docker, config: &Config, ver: &APKBUILD) -> anyhow::Result<()> {
 	info!("Building Rust 1.{}.{}", ver.rustminor, ver.rustpatch);
 
 	let mut tar_buf: Vec<u8> = Vec::new();
@@ -40,29 +41,29 @@ pub(super) async fn build(repodir: &str, docker: &Docker, config: &Config, ver: 
 
 	// write the APKBUILD file
 	{
-		let apkbuild = ver.render().expect("Failed to render APKBUILD");
+		let apkbuild = ver.render()?;
 		let bytes = apkbuild.as_bytes();
 		let header = tar_header("APKBUILD", bytes.len());
-		tar.append(&header, Cursor::new(bytes)).expect("Failed to write APKBUILD");
+		tar.append(&header, Cursor::new(bytes))?;
 	}
 
 	// write the Dockerfile file
 	{
-		let dockerfile = config.dockerfile().render().expect("Failed to render Dockerfile");
+		let dockerfile = config.dockerfile().render()?;
 		let bytes = dockerfile.as_bytes();
 		let header = tar_header("Dockerfile", bytes.len());
-		tar.append(&header, Cursor::new(bytes)).expect("Failed to write Dockerfile");
+		tar.append(&header, Cursor::new(bytes))?;
 	}
 
 	// copy the public and private keys
 	for key in &[&config.privkey, &config.pubkey] {
 		// TODO sync i/o in async context
-		let mut file = File::open(key).expect("Failed to open abuild key");
-		tar.append_file(key, &mut file).expect("Failed to write abuild key");
+		let mut file = File::open(key)?;
+		tar.append_file(key, &mut file)?;
 	}
 
 	// finish the tar archive
-	tar.finish().expect("Failed to finish tar archive");
+	tar.finish()?;
 	drop(tar);
 
 	// build the docker image
@@ -84,8 +85,7 @@ pub(super) async fn build(repodir: &str, docker: &Docker, config: &Config, ver: 
 		}
 		if let Some(err) = status.error {
 			print!("{}", err);
-			error!("Failed to build docker image {}", img);
-			exit(1);
+			return Err(anyhow::Error::msg(format!("Failed to build docker image {}", img)));
 		}
 	}
 	info!("Built docker image {}", img);
@@ -113,15 +113,11 @@ pub(super) async fn build(repodir: &str, docker: &Docker, config: &Config, ver: 
 			}),
 			..Default::default()
 		})
-		.await
-		.expect("Failed to create container");
+		.await?;
 	info!("Created container {}", container.id);
 
 	// start the container
-	docker
-		.start_container::<String>(&container.id, None)
-		.await
-		.expect("Failed to start container");
+	docker.start_container::<String>(&container.id, None).await?;
 	info!("Started container {}", container.id);
 
 	// attach to the container logs
@@ -136,7 +132,7 @@ pub(super) async fn build(repodir: &str, docker: &Docker, config: &Config, ver: 
 		})
 	);
 	while let Some(log) = logs.next().await {
-		let log = log.expect("Failed to attach to container");
+		let log = log?;
 		print!("{}", log);
 	}
 	info!("Log stream finished");
@@ -144,11 +140,7 @@ pub(super) async fn build(repodir: &str, docker: &Docker, config: &Config, ver: 
 	// ensure that the container has stopped
 	loop {
 		delay_for(Duration::new(2, 0)).await;
-		let state = docker
-			.inspect_container(&container.id, None)
-			.await
-			.expect("Failed to inspect container")
-			.state;
+		let state = docker.inspect_container(&container.id, None).await?.state;
 		let state = match state {
 			Some(state) => state,
 			None => {
@@ -168,10 +160,14 @@ pub(super) async fn build(repodir: &str, docker: &Docker, config: &Config, ver: 
 			}
 		};
 		if exit_code != 0 {
-			error!("Container {} finished with exit code {}", container.id, exit_code);
-			exit(1);
+			return Err(anyhow::Error::msg(format!(
+				"Container {} finished with exit code {}",
+				container.id, exit_code
+			)));
 		}
 		break;
 	}
 	info!("Container {} has stopped", container.id);
+
+	Ok(())
 }
