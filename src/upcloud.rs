@@ -15,7 +15,6 @@ use std::{
 	path::Path,
 	time::Duration
 };
-use surf::{http::mime::JSON, Body};
 use tokio::{
 	fs::{self, File},
 	io::{AsyncReadExt, AsyncWriteExt},
@@ -30,8 +29,7 @@ pub const UPCLOUD_MEMORY: u16 = 8 * 1024;
 pub const UPCLOUD_STORAGE: u16 = 15;
 
 lazy_static! {
-	static ref UPCLOUD_CORES_STR: String = UPCLOUD_CORES.to_string();
-	static ref UPCLOUD_MEMORY_STR: String = UPCLOUD_MEMORY.to_string();
+	static ref CLIENT: reqwest::Client = reqwest::Client::new();
 }
 
 #[derive(Serialize)]
@@ -190,13 +188,15 @@ impl<'a> CreateServerRequest<'a> {
 		}
 	}
 
-	async fn send(&self, username: &str, password: &str) -> surf::Result<ServerResponse> {
+	async fn send(&self, username: &str, password: &str) -> anyhow::Result<ServerResponse> {
 		let auth = format!("{}:{}", username, password);
-		let value: serde_json::Value = surf::post("https://api.upcloud.com/1.3/server")
+		let value: serde_json::Value = CLIENT
+			.post("https://api.upcloud.com/1.3/server")
 			.header("authorization", format!("Basic {}", base64::encode(auth.as_bytes())))
-			.content_type(JSON)
-			.body(Body::from_json(self)?)
-			.recv_json()
+			.json(self)
+			.send()
+			.await?
+			.json()
 			.await?;
 		debug!("Response: {:?}", value);
 		Ok(serde_json::from_value(value)?)
@@ -224,13 +224,15 @@ impl StopServerRequest {
 		}
 	}
 
-	async fn send(&self, username: &str, password: &str, server_uuid: &str) -> surf::Result<serde_json::Value> {
+	async fn send(&self, username: &str, password: &str, server_uuid: &str) -> anyhow::Result<serde_json::Value> {
 		let auth = format!("{}:{}", username, password);
-		let value: serde_json::Value = surf::post(format!("https://api.upcloud.com/1.3/server/{}/stop", server_uuid))
+		let value: serde_json::Value = CLIENT
+			.post(&format!("https://api.upcloud.com/1.3/server/{}/stop", server_uuid))
 			.header("authorization", format!("Basic {}", base64::encode(auth.as_bytes())))
-			.content_type(JSON)
-			.body(Body::from_json(self)?)
-			.recv_json()
+			.json(self)
+			.send()
+			.await?
+			.json()
 			.await?;
 		debug!("Response: {:?}", value);
 		Ok(value)
@@ -247,12 +249,13 @@ impl DeleteServerRequest {
 		Self { storages: 1 }
 	}
 
-	async fn send(&self, username: &str, password: &str, server_uuid: &str) -> surf::Result<()> {
+	async fn send(&self, username: &str, password: &str, server_uuid: &str) -> anyhow::Result<()> {
 		let auth = format!("{}:{}", username, password);
-		let bytes = surf::delete(format!("https://api.upcloud.com/1.3/server/{}", server_uuid))
-			.query(self)?
+		let bytes = CLIENT
+			.delete(&format!("https://api.upcloud.com/1.3/server/{}", server_uuid))
+			.query(self)
 			.header("authorization", format!("Basic {}", base64::encode(auth.as_bytes())))
-			.recv_bytes()
+			.send()
 			.await?;
 		debug!("Response: {:?}", bytes);
 		Ok(())
@@ -414,7 +417,7 @@ pub(super) struct UpcloudServer {
 }
 
 impl UpcloudServer {
-	pub(super) async fn destroy(&self) -> surf::Result<()> {
+	pub(super) async fn destroy(&self) -> anyhow::Result<()> {
 		info!("Removing Server {}", self.uuid);
 
 		let username = "msrd0";
@@ -439,7 +442,7 @@ fn ip_last_parts(ip: &str) -> String {
 	parts.join("-")
 }
 
-pub(super) async fn launch_server(config: &Config, repodir: &Path) -> surf::Result<UpcloudServer> {
+pub(super) async fn launch_server(config: &Config, repodir: &Path) -> anyhow::Result<UpcloudServer> {
 	let rng = thread_rng();
 	let hostname = rng.sample_iter(Alphanumeric).take(10).collect::<String>();
 	let title = format!("alpine-rust-{}", hostname);
