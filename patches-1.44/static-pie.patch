@@ -70,8 +70,8 @@ library, just like static binaries, but more secure.
              needs_plt: false,
              relro_level: RelroLevel::None,
              pre_link_objects_exe: Vec::new(),
+             pre_link_objects_exe_crt: Vec::new(),
              pre_link_objects_dll: Vec::new(),
-             post_link_objects: Vec::new(),
 --- a/src/librustc_codegen_ssa/back/link.rs
 +++ b/src/librustc_codegen_ssa/back/link.rs
 @@ -1350,12 +1350,7 @@
@@ -99,7 +99,7 @@ library, just like static binaries, but more secure.
          key!(relro_level, RelroLevel)?;
          key!(archive_format);
          key!(allow_asm, bool);
-         key!(custom_unwind_resume, bool);
+         key!(main_needs_argc_argv, bool);
 @@ -1397,8 +1397,9 @@
          target_option_val!(has_rpath);
          target_option_val!(no_default_libraries);
@@ -109,4 +109,4 @@ library, just like static binaries, but more secure.
          target_option_val!(relro_level);
          target_option_val!(archive_format);
          target_option_val!(allow_asm);
-         target_option_val!(custom_unwind_resume);
+         target_option_val!(main_needs_argc_argv);
