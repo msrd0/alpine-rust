@@ -16,6 +16,7 @@ use std::{
 };
 use tempfile::{tempdir, TempDir};
 use tokio::{fs::File, io::AsyncReadExt};
+use upcloud::UPCLOUD_CORES;
 
 mod docker;
 mod metadata;
@@ -52,12 +53,12 @@ struct Dockerfile<'a> {
 }
 
 impl Config {
-	fn dockerfile(&self) -> Dockerfile<'_> {
+	fn dockerfile(&self, jobs: u16) -> Dockerfile<'_> {
 		Dockerfile {
 			alpine: &self.alpine,
 			pubkey: &self.pubkey,
 			privkey: &self.privkey,
-			jobs: upcloud::UPCLOUD_CORES
+			jobs
 		}
 	}
 }
@@ -193,11 +194,14 @@ async fn main() {
 	for ver in pkg_updates {
 		// build the package
 		{
-			let repodir = match &server {
-				Some(_) => Cow::Borrowed("/var/lib/alpine-rust"),
-				None => current_dir().unwrap().join("repo").to_string_lossy().to_string().into()
+			let (repodir, jobs) = match &server {
+				Some(_) => (Cow::Borrowed("/var/lib/alpine-rust"), UPCLOUD_CORES),
+				None => (
+					current_dir().unwrap().join("repo").to_string_lossy().to_string().into(),
+					num_cpus::get() as u16
+				)
 			};
-			if let Err(err) = package::build(&repodir, &docker, &config, ver).await {
+			if let Err(err) = package::build(&repodir, &docker, &config, ver, jobs).await {
 				error!("Failed to build package: {}", err);
 				if let Some(server) = server {
 					server.destroy().await.expect("Failed to destroy the server");

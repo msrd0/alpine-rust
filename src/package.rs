@@ -33,7 +33,7 @@ pub(super) async fn up_to_date(repodir: &Path, config: &Config, ver: &APKBUILD) 
 	}
 }
 
-pub(super) async fn build(repodir: &str, docker: &Docker, config: &Config, ver: &APKBUILD) -> anyhow::Result<()> {
+pub(super) async fn build(repodir: &str, docker: &Docker, config: &Config, ver: &APKBUILD, jobs: u16) -> anyhow::Result<()> {
 	info!("Building Rust 1.{}.{}", ver.rustminor, ver.rustpatch);
 
 	let mut tar_buf: Vec<u8> = Vec::new();
@@ -49,7 +49,7 @@ pub(super) async fn build(repodir: &str, docker: &Docker, config: &Config, ver: 
 
 	// write the Dockerfile file
 	{
-		let dockerfile = config.dockerfile().render()?;
+		let dockerfile = config.dockerfile(jobs).render()?;
 		let bytes = dockerfile.as_bytes();
 		let header = tar_header("Dockerfile", bytes.len());
 		tar.append(&header, Cursor::new(bytes))?;
