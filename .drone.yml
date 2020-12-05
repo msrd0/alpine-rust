@@ -90,17 +90,6 @@ steps:
 
 ---
 kind: pipeline
-name: ipv6-test
-
-steps:
-  - name: ipv6-test
-    image: busybox
-    pull: always
-    commands:
-      - ping6 -c 5 drone.msrd0.eu
-
----
-kind: pipeline
 name: build
 
 depends_on:
@@ -117,6 +106,12 @@ trigger:
     - success
 
 steps:
+  - name: ipv6-test
+    image: busybox
+    pull: always
+    commands:
+      - ping6 -c 5 drone.msrd0.eu
+  
   - name: restore-cache
     image: meltwater/drone-cache:v1
     pull: always
