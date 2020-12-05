@@ -1,0 +1,13 @@
+--- a/src/bootstrap/builder.rs    2020-12-05 23:51:39.538505325 +0100
++++ b/src/bootstrap/builder.rs    2020-12-05 23:51:50.718413591 +0100
+@@ -727,10 +727,6 @@
+ 
+         cargo.env("CARGO_TARGET_DIR", &out_dir).arg(cmd);
+ 
+-        if !self.local_rebuild {
+-            cargo.arg("-Zconfig-profile");
+-        }
+-
+         let profile_var = |name: &str| {
+             let profile = if self.config.rust_optimize { "RELEASE" } else { "DEV" };
+             format!("CARGO_PROFILE_{}_{}", profile, name)
