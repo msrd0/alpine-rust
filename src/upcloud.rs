@@ -152,6 +152,8 @@ impl<'a> CreateServerRequest<'a> {
 				networking: Networking {
 					interfaces: Interfaces {
 						interface: vec![
+							// TODO remove the IPv4 address once docker's registry finally
+							// supports IPv6: https://github.com/docker/roadmap/issues/89
 							Interface {
 								ip_addresses: IpAddresses {
 									ip_address: vec![IpAddress {
@@ -160,7 +162,7 @@ impl<'a> CreateServerRequest<'a> {
 										family: IpFamily::IPv4
 									}]
 								},
-								ty: "utility"
+								ty: "public"
 							},
 							Interface {
 								ip_addresses: IpAddresses {
