@@ -94,7 +94,6 @@ name: build
 
 depends_on:
   - check
-  - ipv6-test
 trigger:
   branch:
     - master
