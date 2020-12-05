@@ -90,10 +90,22 @@ steps:
 
 ---
 kind: pipeline
+name: ipv6-test
+
+steps:
+  - name: ipv6-test
+    image: busybox
+    pull: always
+    commands:
+      - ping6 -c 5 drone.msrd0.eu
+
+---
+kind: pipeline
 name: build
 
 depends_on:
   - check
+  - ipv6-test
 trigger:
   branch:
     - master
