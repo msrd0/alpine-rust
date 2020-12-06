@@ -29,6 +29,7 @@ struct APKBUILD {
 	rustminor: u32,
 	rustpatch: u32,
 	pkgrel: u32,
+	llvmver: u32,
 	bootver: String,
 	bootsys: bool,
 	sysver: Option<String>,

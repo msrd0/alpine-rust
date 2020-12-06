@@ -9,7 +9,7 @@
 _rustver=1.{{ rustminor }}
 pkgname=rust-$_rustver
 pkgver=$_rustver.{{ rustpatch }}
-_llvmver=10
+_llvmver={{ llvmver }}
 _bootver={{ bootver }}
 pkgrel={{ pkgrel }}
 pkgdesc="The Rust Programming Language"
