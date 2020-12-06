@@ -84,10 +84,17 @@ lazy_static! {
 	static ref GITHUB_TOKEN: String = env::var("GITHUB_TOKEN").expect("GITHUB_TOKEN must be set");
 }
 
+const GIT_NAME: &str = "drone.msrd0.eu [bot]";
+const GIT_EMAIL: &str = "noreply@drone.msrd0.eu";
+
 fn run_git(dir: &Path, args: &[&str]) -> bool {
 	let status = Command::new("git")
 		.args(args)
 		.current_dir(dir)
+		.env("GIT_AUTHOR_NAME", GIT_NAME)
+		.env("GIT_AUTHOR_EMAIL", GIT_EMAIL)
+		.env("GIT_COMMITTER_NAME", GIT_NAME)
+		.env("GIT_COMMITTER_EMAIL", GIT_EMAIL)
 		.status()
 		.expect("Failed to run git");
 	status.success()
@@ -110,11 +117,11 @@ fn git_clone() -> TempDir {
 		error!("Failed to clone git repo");
 		exit(1);
 	}
-	if !run_git(repodir.path(), &["config", "user.name", "drone.msrd0.eu [bot]"]) {
+	if !run_git(repodir.path(), &["config", "user.name", GIT_NAME]) {
 		error!("Failed to set git user.name config");
 		exit(1);
 	}
-	if !run_git(repodir.path(), &["config", "user.email", "noreply@drone.msrd0.eu"]) {
+	if !run_git(repodir.path(), &["config", "user.email", GIT_EMAIL]) {
 		error!("Failed to set git user.email config");
 		exit(1);
 	}
