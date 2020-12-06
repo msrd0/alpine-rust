@@ -553,13 +553,13 @@ pub(super) async fn commit_changes(
 	// download those files and add them to git
 	let mut err: Option<&'static str> = None;
 	for file in &updated {
-		download(
-			&mut sess,
-			&format!("{}/{}", dir, file),
-			&repodir.join(format!("{}/alpine-rust/x86_64/{}", config.alpine, file))
-		)
-		.await?;
-		if !run_git(repodir, &["add", &format!("{}/alpine-rust/x86_64/{}", config.alpine, file)]) {
+		let path = format!("{}/alpine-rust/x86_64/{}", config.alpine, file);
+		download(&mut sess, &format!("{}/{}", dir, file), &repodir.join(&path)).await?;
+		if !run_git(repodir, &["lfs", "track", &path]) {
+			error!("Unable to track {} with git lfs", file);
+			err = Some("Unable to track file with git lfs");
+		}
+		if !run_git(repodir, &["add", &path]) {
 			error!("Unable to add {} to git", file);
 			err = Some("Unable to add files to git");
 		}
@@ -568,6 +568,10 @@ pub(super) async fn commit_changes(
 	// create the commit
 	info!("Commiting changes for rust-1.{}", ver.rustminor);
 	let msg = format!("Update rust-1.{} package for alpine {}", ver.rustminor, config.alpine);
+	if !run_git(repodir, &["add", ".gitattributes"]) {
+		error!("Failed to add .gitattributes to git");
+		err = Some("Unable to add .gitattributes to git");
+	}
 	if !run_git(repodir, &["commit", "-m", &msg]) {
 		error!("Failed to create commit");
 		err = Some("Failed to create commit");
