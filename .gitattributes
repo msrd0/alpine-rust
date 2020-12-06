@@ -13,3 +13,17 @@
 3.12/alpine-rust/x86_64/cargo-1.40-bash-completions-1.40.0-r1.apk filter=lfs diff=lfs merge=lfs -text
 3.12/alpine-rust/x86_64/rustfmt-1.40-1.40.0-r1.apk filter=lfs diff=lfs merge=lfs -text
 3.12/alpine-rust/x86_64/rust-1.40-1.40.0-r1.apk filter=lfs diff=lfs merge=lfs -text
+3.12/alpine-rust/x86_64/rustfmt-1.45-1.45.2-r1.apk filter=lfs diff=lfs merge=lfs -text
+3.12/alpine-rust/x86_64/rust-1.45-dbg-1.45.2-r1.apk filter=lfs diff=lfs merge=lfs -text
+3.12/alpine-rust/x86_64/rust-1.45-src-1.45.2-r1.apk filter=lfs diff=lfs merge=lfs -text
+3.12/alpine-rust/x86_64/rust-1.45-analysis-1.45.2-r1.apk filter=lfs diff=lfs merge=lfs -text
+3.12/alpine-rust/x86_64/rust-1.45-doc-1.45.2-r1.apk filter=lfs diff=lfs merge=lfs -text
+3.12/alpine-rust/x86_64/rust-1.45-lldb-1.45.2-r1.apk filter=lfs diff=lfs merge=lfs -text
+3.12/alpine-rust/x86_64/clippy-1.45-1.45.2-r1.apk filter=lfs diff=lfs merge=lfs -text
+3.12/alpine-rust/x86_64/rust-1.45-gdb-1.45.2-r1.apk filter=lfs diff=lfs merge=lfs -text
+3.12/alpine-rust/x86_64/cargo-1.45-doc-1.45.2-r1.apk filter=lfs diff=lfs merge=lfs -text
+3.12/alpine-rust/x86_64/rust-1.45-stdlib-1.45.2-r1.apk filter=lfs diff=lfs merge=lfs -text
+3.12/alpine-rust/x86_64/cargo-1.45-1.45.2-r1.apk filter=lfs diff=lfs merge=lfs -text
+3.12/alpine-rust/x86_64/cargo-1.45-zsh-completion-1.45.2-r1.apk filter=lfs diff=lfs merge=lfs -text
+3.12/alpine-rust/x86_64/rust-1.45-1.45.2-r1.apk filter=lfs diff=lfs merge=lfs -text
+3.12/alpine-rust/x86_64/cargo-1.45-bash-completions-1.45.2-r1.apk filter=lfs diff=lfs merge=lfs -text
