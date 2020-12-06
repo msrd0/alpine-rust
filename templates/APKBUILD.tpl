@@ -68,10 +68,12 @@ subpackages="
 	$pkgname-lldb::noarch
 	$pkgname-doc
 	$pkgname-src::noarch
+	rustfmt-$_rustver:_rustfmt
 	cargo-$_rustver:_cargo
 	cargo-$_rustver-bash-completions:_cargo_bashcomp:noarch
 	cargo-$_rustver-zsh-completion:_cargo_zshcomp:noarch
 	cargo-$_rustver-doc:_cargo_doc:noarch
+	clippy-$_rustver:_clippy
 	"
 source="
 	https://static.rust-lang.org/dist/rustc-$pkgver-src.tar.gz
@@ -147,7 +149,7 @@ build() {
 		--llvm-root="/usr/lib/llvm$_llvmver" \
 		--disable-docs \
 		--enable-extended \
-		--tools="analysis,cargo,src" \
+		--tools="analysis,cargo,clippy,rustfmt,src" \
 		--enable-llvm-link-shared \
 		--enable-option-checking \
 		--enable-locked-deps \
@@ -267,6 +269,16 @@ src() {
 	ln -s ../../../src/rust "$subpkgdir"/usr/lib/rustlib/src/rust
 }
 
+_rustfmt() {
+	pkgdesc="Format Rust code"
+	license="Apache-2.0 MIT"
+	depends="cargo-$_rustver=$pkgver"
+	provides="rustfmt=$pkgver"
+	
+	_mv "$pkgdir"/usr/bin/cargo-fmt "$subpkgdir"/usr/bin
+	_mv "$pkgdir"/usr/bin/rustfmt "$subpkgdir"/usr/bin
+}
+
 _cargo() {
 	pkgdesc="The Rust package manager"
 	license="Apache-2.0 MIT UNLICENSE"
@@ -311,6 +323,16 @@ _cargo_doc() {
 	# XXX: This is hackish!
 	cd "$pkgdir"/../$pkgname-doc
 	_mv usr/share/man/man1/cargo* "$subpkgdir"/usr/share/man/man1/
+}
+
+_clippy() {
+	pkgdesc="A bunch of lints to catch common mistakes and improve your Rust code "
+	license="Apache-2.0 MIT"
+	depends="cargo-$_rustver=$pkgver"
+	provides="rustfmt=$pkgver"
+	
+	_mv "$pkgdir"/usr/bin/cargo-clippy "$subpkgdir"/usr/bin
+	_mv "$pkgdir"/usr/bin/clippy-driver "$subpkgdir"/usr/bin
 }
 
 _mv() {

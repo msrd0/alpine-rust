@@ -38,4 +38,4 @@ WORKDIR /home/alpine-rust/package
 COPY APKBUILD ./
 
 # the command to build is pretty straight-forward
-CMD ["/bin/ash", "-c", "sudo apk update && abuild -r && find /repo/{{ alpine }} -type f"]
+CMD ["/bin/ash", "-c", "sudo apk update && abuild -r"]
