@@ -178,10 +178,17 @@ async fn main() {
 
 	// upcloud for CI, local for non-CI
 	let (mut server, docker) = if *CI {
-		// launch an upcloud server
-		let server = upcloud::launch_server(&config, &repodir)
-			.await
-			.expect("Failed to launch UpCloud server");
+		// create an upcloud server
+		let server = upcloud::create_server().await.expect("Failed to create UpCloud server");
+
+		let server = match upcloud::install_server(&config, &server, &repodir).await {
+			Ok(server) => server,
+			Err(err) => {
+				error!("Failed to install server: {}", err);
+				server.destroy().await.expect("Failed to destroy the server");
+				exit(1);
+			}
+		};
 
 		let docker_addr = format!("tcp://{}:8443/", server.domain);
 		info!("Connecting to {}", docker_addr);

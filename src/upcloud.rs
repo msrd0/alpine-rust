@@ -84,7 +84,7 @@ struct StorageDevice<'a> {
 }
 
 #[derive(Deserialize)]
-struct ServerResponse {
+pub(super) struct ServerResponse {
 	server: Server
 }
 
@@ -420,17 +420,27 @@ pub(super) struct UpcloudServer {
 
 impl UpcloudServer {
 	pub(super) async fn destroy(&self) -> anyhow::Result<()> {
-		info!("Removing Server {}", self.uuid);
-
-		let username = "msrd0";
-		let password = env::var("UPCLOUD_PASSWORD")?;
-
-		StopServerRequest::new().send(username, &password, &self.uuid).await?;
-		delay_for(Duration::new(30, 0)).await;
-		DeleteServerRequest::new().send(username, &password, &self.uuid).await?;
-
-		Ok(())
+		destroy_server(&self.uuid).await
 	}
+}
+
+impl ServerResponse {
+	pub(super) async fn destroy(&self) -> anyhow::Result<()> {
+		destroy_server(self.uuid()).await
+	}
+}
+
+async fn destroy_server(uuid: &str) -> anyhow::Result<()> {
+	info!("Removing Server {}", uuid);
+
+	let username = "msrd0";
+	let password = env::var("UPCLOUD_PASSWORD")?;
+
+	StopServerRequest::new().send(username, &password, uuid).await?;
+	delay_for(Duration::new(30, 0)).await;
+	DeleteServerRequest::new().send(username, &password, uuid).await?;
+
+	Ok(())
 }
 
 fn ip_last_parts(ip: &str) -> String {
@@ -444,7 +454,7 @@ fn ip_last_parts(ip: &str) -> String {
 	parts.join("-")
 }
 
-pub(super) async fn launch_server(config: &Config, repodir: &Path) -> anyhow::Result<UpcloudServer> {
+pub(super) async fn create_server() -> anyhow::Result<ServerResponse> {
 	let rng = thread_rng();
 	let hostname = rng.sample_iter(Alphanumeric).take(10).collect::<String>();
 	let title = format!("alpine-rust-{}", hostname);
@@ -453,7 +463,14 @@ pub(super) async fn launch_server(config: &Config, repodir: &Path) -> anyhow::Re
 	let username = "msrd0";
 	let password = env::var("UPCLOUD_PASSWORD")?;
 	let req = CreateServerRequest::new(&title, "alpinerust");
-	let server = req.send(username, &password).await?;
+	Ok(req.send(username, &password).await?)
+}
+
+pub(super) async fn install_server(
+	config: &Config,
+	server: &ServerResponse,
+	repodir: &Path
+) -> anyhow::Result<UpcloudServer> {
 	let ip = server.ip_addr().ok_or(anyhow::Error::msg("Server does not have an IP"))?;
 	let password = server.password();
 	let uuid = server.uuid();
@@ -509,7 +526,7 @@ pub(super) async fn launch_server(config: &Config, repodir: &Path) -> anyhow::Re
 		.await?;
 	}
 	run(&mut sess, "chmod 777 $(find /var/lib/alpine-rust -type d)")?;
-	run(&mut sess, "chmod 666 $(find /var/lib/alpine-rust -type f)")?;
+	run(&mut sess, &format!("test ! -e /var/lib/alpine-rust/{}/alpine-rust/x86_64/APKINDEX.tar.gz || chmod 666 $(find /var/lib/alpine-rust -type f)", config.alpine))?;
 
 	// index the repository
 	let repo_index = index(&mut sess, &dir)?;
