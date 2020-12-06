@@ -318,10 +318,7 @@ fn run(sess: &mut Session, cmd: &str) -> anyhow::Result<()> {
 fn index(sess: &mut Session, path: &str) -> anyhow::Result<HashMap<String, String>> {
 	info!("SSH: Indexing {}", path);
 	let mut channel = sess.channel_session()?;
-	let cmd = format!(
-		"cd '{}' && (test -z \"$(find . -maxdepth 0 -type d -empty)\" || sha256sum *)",
-		path
-	);
+	let cmd = format!("cd '{}' && test -z \"$(ls)\" || sha256sum *", path);
 	channel.exec(&cmd)?;
 
 	let mut index: HashMap<String, String> = HashMap::new();
