@@ -33,7 +33,7 @@ pub(super) async fn update(config: &Config, repodir: &Path) {
 	drop(index_html);
 
 	if !pubkey_existed || !index_existed || !run_git(repodir, &["diff", "--exit-code"]) {
-		if env::var("CI").is_ok() {
+		if env::var("CI").is_err() {
 			info!("Running outside CI - Not commiting metadata changes");
 		} else {
 			info!("Commiting metadata changes");
