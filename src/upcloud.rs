@@ -513,7 +513,7 @@ pub(super) async fn launch_server(config: &Config, repodir: &Path) -> anyhow::Re
 
 	// index the repository
 	let repo_index = index(&mut sess, &dir)?;
-	info!("Index: {:?}", repo_index);
+	debug!("Index: {:?}", repo_index);
 
 	Ok(UpcloudServer {
 		ip: ip.to_owned(),

@@ -15,7 +15,10 @@ use std::{
 	process::{exit, Command}
 };
 use tempfile::{tempdir, TempDir};
-use tokio::{fs::File, io::AsyncReadExt};
+use tokio::{
+	fs::{self, File},
+	io::AsyncReadExt
+};
 use upcloud::UPCLOUD_CORES;
 
 mod docker;
@@ -152,6 +155,11 @@ async fn main() {
 		let dir = current_dir().unwrap().join("repo");
 		(None, dir)
 	};
+
+	// create the repo dir if it does not exist yet
+	if let Err(err) = fs::create_dir_all(repodir.join(format!("{}/alpine-rust/x86_64", config.alpine))).await {
+		warn!("Unable to create {}/alpine-rust/x86_64: {}", config.alpine, err);
+	}
 
 	// update the metadata
 	metadata::update(&config, &repodir).await;
