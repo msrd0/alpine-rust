@@ -49,7 +49,7 @@ pub(super) async fn build(repodir: &str, docker: &Docker, config: &Config, ver: 
 
 	// write the Dockerfile file
 	{
-		let dockerfile = config.dockerfile(jobs).render()?;
+		let dockerfile = config.dockerfile(ver, jobs).render()?;
 		let bytes = dockerfile.as_bytes();
 		let header = tar_header("Dockerfile", bytes.len());
 		tar.append(&header, Cursor::new(bytes))?;

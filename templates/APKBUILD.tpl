@@ -22,7 +22,11 @@ license="Apache-2.0 AND MIT"
 # See: https://github.com/rust-lang/rust/issues/11937
 depends="$pkgname-stdlib=$pkgver-r$pkgrel gcc musl-dev"
 
+{% if python.is_some() -%}
+_python={{ python.as_deref().unwrap() }}
+{% else -%}
 _python=python3
+{% endif %}
 # * Rust is self-hosted, so you need rustc (and cargo) to build rustc...
 #   The last revision of this abuild that does not depend on itself (uses
 #   prebuilt rustc and cargo) is 2e6769eb39eaff3029d8298fc02856623c563cd8.
@@ -33,9 +37,15 @@ makedepends_build="
 	coreutils
 	llvm$_llvmver-dev
 	llvm$_llvmver-test-utils
-	{% if bootsys %}rust=>$_bootver{% else %}rust-$_bootver{% endif %}
-	{% if bootsys %}cargo=>$_bootver{% else %}cargo-$_bootver{% endif %}
+	{% if sysver.is_some() -%}
 "
+# FIXME: not including cargo/rust dependencies because we're using packages from alpine-{{ sysver.as_deref().unwrap() }}
+	{% else -%}
+	{% if bootsys %}rust=$_bootver{% else %}rust-$_bootver{% endif %}
+	{% if bootsys %}cargo=$_bootver{% else %}cargo-$_bootver{% endif %}
+"
+	{%- endif %}
+
 makedepends_host="
 	curl-dev
 	libgit2-dev

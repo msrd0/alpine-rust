@@ -5,16 +5,45 @@ pubkey = "alpine@msrd0.de-5fc3c0b2.rsa.pub"
 # NOTE: always put rust versions in ascending order to ensure that the previous rust compiler can be used to compile
 # the latest one since the system rust will likely be too old to compile the latest rust compiler.
 
+# NOTE: rust does not support compiling older compilers with newer ones. we need to always use some rust from an old
+# alpine version if the current stable is too new.
+
+# 1.40.0 - built using 1.39.0 from alpine-3.11
 [[versions]]
-rustminor = 44
-rustpatch = 1
+rustminor = 40
+rustpatch = 0
 pkgrel = 1
-bootver = "1.44.0"
+bootver = "1.39.0"
 bootsys = true
+sysver = "3.11"
 sha512sums = """
-f6b719a2a63aa96a192a098f58ff1042251cee96a1ff742ecb09d5b88fe5be79bc7023f118e0a6c0d46aa1c819ff77274ab669668f8e53efa4eb5e3041227928  rustc-1.44.1-src.tar.gz
-5082973ffe9a383af38ca616fcaff58fe6bc1bb172f905b6010972095a43edd09829bc19d96176edf8e4bc27aea02d1a873be79f83f034ecc9a3e33e828fbcb7  1.44.tar.gz
+8afdb7fddbc5f2cec05fe962cd425ff8f3f41b056ffc983135d21d5c7d217084a1d73b4f9e4ff12faf7731ff1332d2889b71eed0a5216dd5eff5302d26b33d1e  rustc-1.40.0-src.tar.gz
+9c1f857d8e5a8745e6452b55bd09e6505a9f013c2588fbf4e5da3f712ec0f7bb00b1385985d8a846a85bd8bb4f2fb92fac162b3bae6aade91f2f659ab93f6889  1.40.tar.gz
 """
+
+# 1.43.1
+#[[versions]]
+#rustminor = 43
+#rustpatch = 1
+#pkgrel = 1
+#bootver = "1.44.0"
+#bootsys = true
+#sha512sums = """
+#d432e908a29732516cb1784a24df9f82c20852bb0cf4d0120208b0ff542c4b0d7ad0d6d78f826dd47b1f04e07d46cf4a9ac9fe9cff89f763a7241a59288cef22  rustc-1.43.1-src.tar.gz
+#e82c14bc54065657d8f279408d91b3218f3bf48e17e68e110146cab5eefc8b6e1d53114a4355ea2a4e9e74bc4a375a27cad84eae7c35fecf6270268e78bd45bf  1.43.tar.gz
+#"""
+
+# 1.44.1 - compiler panic when compiling
+#[[versions]]
+#rustminor = 44
+#rustpatch = 1
+#pkgrel = 1
+#bootver = "1.44.0"
+#bootsys = true
+#sha512sums = """
+#f6b719a2a63aa96a192a098f58ff1042251cee96a1ff742ecb09d5b88fe5be79bc7023f118e0a6c0d46aa1c819ff77274ab669668f8e53efa4eb5e3041227928  rustc-1.44.1-src.tar.gz
+#414ea7eca5b820007cf203c2306355026ddccb7e2cfa238ce8e73f55c270794903ec72fdd4462dd7cf39e43b50fbc3456feed9e9d3141b398c1e2f64a7bfd2f9  1.44.tar.gz
+#"""
 
 # 1.45.2
 [[versions]]

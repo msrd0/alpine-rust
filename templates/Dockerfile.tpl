@@ -3,6 +3,13 @@ FROM alpine:{{ alpine }}
 # install basic dependencies
 RUN apk add --no-cache alpine-sdk sudo
 
+{% if sysver.is_some() -%}
+{% let sysver = sysver.unwrap() -%}
+# enable old alpine repos so we can pull older rust versions
+RUN echo "@{{ sysver }} http://dl-cdn.alpinelinux.org/alpine/v{{ sysver }}/community" >>/etc/apk/repositories \
+ && apk add --no-cache cargo@{{ sysver }} rust@{{ sysver }}
+{%- endif %}
+
 # we will store the repository here
 VOLUME /repo
 RUN sed -i 's,REPODEST=.*,REPODEST=/repo/{{ alpine }},g' /etc/abuild.conf

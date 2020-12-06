@@ -31,6 +31,8 @@ struct APKBUILD {
 	pkgrel: u32,
 	bootver: String,
 	bootsys: bool,
+	sysver: Option<String>,
+	python: Option<String>,
 	sha512sums: String
 }
 
@@ -49,15 +51,17 @@ struct Dockerfile<'a> {
 	alpine: &'a str,
 	pubkey: &'a str,
 	privkey: &'a str,
+	sysver: Option<&'a str>,
 	jobs: u16
 }
 
 impl Config {
-	fn dockerfile(&self, jobs: u16) -> Dockerfile<'_> {
+	fn dockerfile<'a>(&'a self, ver: &'a APKBUILD, jobs: u16) -> Dockerfile<'a> {
 		Dockerfile {
 			alpine: &self.alpine,
 			pubkey: &self.pubkey,
 			privkey: &self.privkey,
+			sysver: ver.sysver.as_deref(),
 			jobs
 		}
 	}
