@@ -1,15 +1,17 @@
-use super::{tar_header, Config, APKBUILD};
+use super::{Config, APKBUILD, GITHUB_TOKEN};
 use askama::Template;
 use bollard::{
+	auth::DockerCredentials,
 	container::{self, LogsOptions},
 	image::BuildImageOptions,
 	models::{HostConfig, Mount, MountTypeEnum},
 	Docker
 };
 use futures_util::StreamExt;
-use std::{collections::HashMap, fs::File, io::Cursor, path::Path, process::exit};
+use std::{collections::HashMap, env, io::Cursor, path::Path, process::exit};
 use tokio::{
-	fs, io,
+	fs::{self, File},
+	io::{self, AsyncReadExt},
 	time::{delay_for, Duration}
 };
 
@@ -25,7 +27,6 @@ pub(super) async fn up_to_date(repodir: &Path, config: &Config, ver: &APKBUILD) 
 		Ok(_) => true,                                              // file exists
 		Err(err) if err.kind() == io::ErrorKind::NotFound => false, // not found
 		Err(err) => {
-			// other i/o error
 			error!("Unable to check if package was up to date: {}", err);
 			// exiting is fine because no upcloud server was provisioned yet
 			exit(1);
@@ -33,50 +34,77 @@ pub(super) async fn up_to_date(repodir: &Path, config: &Config, ver: &APKBUILD) 
 	}
 }
 
-pub(super) async fn build(repodir: &str, docker: &Docker, config: &Config, ver: &APKBUILD, jobs: u16) -> anyhow::Result<()> {
-	info!("Building Rust 1.{}.{}", ver.rustminor, ver.rustpatch);
+fn tar_header(path: &str, len: usize) -> tar::Header {
+	let mut header = tar::Header::new_old();
+	header.set_path(path).unwrap();
+	header.set_mode(0o644);
+	header.set_uid(0);
+	header.set_gid(0);
+	header.set_size(len as u64);
+	header.set_cksum();
+	header
+}
 
+async fn build_tar(
+	apkbuild: Option<&str>,
+	dockerfile: &str,
+	pubkey: &str,
+	privkey: Option<&str>
+) -> anyhow::Result<Vec<u8>> {
 	let mut tar_buf: Vec<u8> = Vec::new();
 	let mut tar = tar::Builder::new(&mut tar_buf);
 
 	// write the APKBUILD file
-	{
-		let apkbuild = ver.render()?;
+	if let Some(apkbuild) = apkbuild {
 		let bytes = apkbuild.as_bytes();
 		let header = tar_header("APKBUILD", bytes.len());
 		tar.append(&header, Cursor::new(bytes))?;
 	}
 
 	// write the Dockerfile file
-	{
-		let dockerfile = config.dockerfile(ver, jobs).render()?;
-		let bytes = dockerfile.as_bytes();
-		let header = tar_header("Dockerfile", bytes.len());
-		tar.append(&header, Cursor::new(bytes))?;
-	}
+	let bytes = dockerfile.as_bytes();
+	let header = tar_header("Dockerfile", bytes.len());
+	tar.append(&header, Cursor::new(bytes))?;
 
-	// copy the public and private keys
-	for key in &[&config.privkey, &config.pubkey] {
-		// TODO sync i/o in async context
-		let mut file = File::open(key)?;
-		tar.append_file(key, &mut file)?;
+	// copy the public key
+	let mut file = File::open(pubkey).await?;
+	let mut bytes = Vec::<u8>::new();
+	file.read_to_end(&mut bytes).await?;
+	let header = tar_header(pubkey, bytes.len());
+	tar.append(&header, Cursor::new(bytes))?;
+
+	if let Some(privkey) = privkey {
+		// copy the public key
+		let mut file = File::open(privkey).await?;
+		let mut bytes = Vec::<u8>::new();
+		file.read_to_end(&mut bytes).await?;
+		let header = tar_header(privkey, bytes.len());
+		tar.append(&header, Cursor::new(bytes))?;
 	}
 
 	// finish the tar archive
 	tar.finish()?;
 	drop(tar);
+	Ok(tar_buf)
+}
+
+async fn docker_build_abuild(docker: &Docker, tag: &str, config: &Config, ver: &APKBUILD, jobs: u16) -> anyhow::Result<()> {
+	info!("Building Docker image {}", tag);
+
+	// create the context tar for docker build
+	let apkbuild = ver.render()?;
+	let dockerfile = config.dockerfile_abuild(ver, jobs).render()?;
+	let tar = build_tar(Some(&apkbuild), &dockerfile, &config.pubkey, Some(&config.privkey)).await?;
 
 	// build the docker image
-	let img = format!("alpine-rust-builder-1.{}", ver.rustminor);
-	info!("Building docker image {}", img);
 	let mut img_stream = docker.build_image(
 		BuildImageOptions {
-			t: img.clone(),
+			t: tag.to_owned(),
 			pull: true,
 			..Default::default()
 		},
 		None,
-		Some(tar_buf.into())
+		Some(tar.into())
 	);
 	while let Some(status) = img_stream.next().await {
 		let status = status.expect("Failed to build image");
@@ -85,10 +113,15 @@ pub(super) async fn build(repodir: &str, docker: &Docker, config: &Config, ver: 
 		}
 		if let Some(err) = status.error {
 			print!("{}", err);
-			return Err(anyhow::Error::msg(format!("Failed to build docker image {}", img)));
+			return Err(anyhow::Error::msg(format!("Failed to build docker image {}", tag)));
 		}
 	}
-	info!("Built docker image {}", img);
+	info!("Built Docker image {}", tag);
+	Ok(())
+}
+
+async fn docker_run_abuild(docker: &Docker, img: &str, repodir: &str) -> anyhow::Result<()> {
+	info!("Creating container for {}", img);
 
 	// create the container
 	let mut volumes: HashMap<String, HashMap<(), ()>> = HashMap::new();
@@ -105,7 +138,7 @@ pub(super) async fn build(repodir: &str, docker: &Docker, config: &Config, ver: 
 		.create_container::<String, String>(None, container::Config {
 			attach_stdout: Some(true),
 			attach_stderr: Some(true),
-			image: Some(img.clone()),
+			image: Some(img.to_owned()),
 			volumes: Some(volumes),
 			host_config: Some(HostConfig {
 				mounts: Some(mounts),
@@ -168,6 +201,83 @@ pub(super) async fn build(repodir: &str, docker: &Docker, config: &Config, ver: 
 		break;
 	}
 	info!("Container {} has stopped", container.id);
+	Ok(())
+}
+
+async fn docker_build_dockerfile(docker: &Docker, tag: &str, dockerfile: &str, config: &Config) -> anyhow::Result<()> {
+	info!("Building Docker image {}", tag);
+
+	// create the context tar for docker build
+	let tar = build_tar(None, dockerfile, &config.pubkey, None).await?;
+
+	// build the docker image
+	let mut img_stream = docker.build_image(
+		BuildImageOptions {
+			t: tag,
+			pull: true,
+			..Default::default()
+		},
+		None,
+		Some(tar.into())
+	);
+	while let Some(status) = img_stream.next().await {
+		let status = status?;
+		if let Some(log) = status.stream {
+			print!("{}", log);
+		}
+		if let Some(err) = status.error {
+			print!("{}", err);
+			return Err(anyhow::Error::msg(format!("Failed to build docker image {}", tag)));
+		}
+	}
+	info!("Built Docker image {}", tag);
+	Ok(())
+}
+
+async fn docker_push(docker: &Docker, tag: &str) -> anyhow::Result<()> {
+	if env::var("CI").is_err() {
+		info!("Running outside CI - not pushing {}", tag);
+		return Ok(());
+	}
+
+	info!("Pushing Docker image {}", tag);
+	let mut push_stream = docker.push_image::<String>(
+		&tag,
+		None,
+		Some(DockerCredentials {
+			username: Some("drone-msrd0-eu".to_owned()),
+			password: Some(GITHUB_TOKEN.clone()),
+			..Default::default()
+		})
+	);
+
+	while let Some(info) = push_stream.next().await {
+		let info = info?;
+		if let Some(err) = info.error {
+			println!("{}", err);
+			return Err(anyhow::Error::msg(format!("Failed to push docker image {}", tag)));
+		}
+	}
+	info!("Pushed Docker image {}", tag);
+	Ok(())
+}
+
+pub(super) async fn build(repodir: &str, docker: &Docker, config: &Config, ver: &APKBUILD, jobs: u16) -> anyhow::Result<()> {
+	info!("Building Rust 1.{}.{}", ver.rustminor, ver.rustpatch);
+
+	let img = format!("alpine-rust-builder-1.{}", ver.rustminor);
+	docker_build_abuild(docker, &img, config, ver, jobs).await?;
+	docker_run_abuild(docker, &img, repodir).await?;
+
+	let img = format!("ghcr.io/msrd0/alpine-rust:1.{}-minimal", ver.rustminor);
+	let dockerfile = config.dockerfile_minimal(ver).render()?;
+	docker_build_dockerfile(docker, &img, &dockerfile, config).await?;
+	docker_push(docker, &img).await?;
+
+	let img = format!("ghcr.io/msrd0/alpine-rust:1.{}", ver.rustminor);
+	let dockerfile = config.dockerfile_default(ver).render()?;
+	docker_build_dockerfile(docker, &img, &dockerfile, config).await?;
+	docker_push(docker, &img).await?;
 
 	Ok(())
 }

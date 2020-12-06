@@ -50,8 +50,8 @@ struct Config {
 }
 
 #[derive(Template)]
-#[template(path = "Dockerfile.tpl", escape = "none")]
-struct Dockerfile<'a> {
+#[template(path = "Dockerfile-abuild.tpl", escape = "none")]
+struct DockerfileAbuild<'a> {
 	alpine: &'a str,
 	pubkey: &'a str,
 	privkey: &'a str,
@@ -59,9 +59,25 @@ struct Dockerfile<'a> {
 	jobs: u16
 }
 
+#[derive(Template)]
+#[template(path = "Dockerfile-default.tpl", escape = "none")]
+struct DockerfileDefault<'a> {
+	alpine: &'a str,
+	pubkey: &'a str,
+	rustver: String
+}
+
+#[derive(Template)]
+#[template(path = "Dockerfile-minimal.tpl", escape = "none")]
+struct DockerfileMinimal<'a> {
+	alpine: &'a str,
+	pubkey: &'a str,
+	rustver: String
+}
+
 impl Config {
-	fn dockerfile<'a>(&'a self, ver: &'a APKBUILD, jobs: u16) -> Dockerfile<'a> {
-		Dockerfile {
+	fn dockerfile_abuild<'a>(&'a self, ver: &'a APKBUILD, jobs: u16) -> DockerfileAbuild<'a> {
+		DockerfileAbuild {
 			alpine: &self.alpine,
 			pubkey: &self.pubkey,
 			privkey: &self.privkey,
@@ -69,17 +85,22 @@ impl Config {
 			jobs
 		}
 	}
-}
 
-fn tar_header(path: &str, len: usize) -> tar::Header {
-	let mut header = tar::Header::new_old();
-	header.set_path(path).unwrap();
-	header.set_mode(0o644);
-	header.set_uid(0);
-	header.set_gid(0);
-	header.set_size(len as u64);
-	header.set_cksum();
-	header
+	fn dockerfile_default<'a>(&'a self, ver: &'a APKBUILD) -> DockerfileDefault<'a> {
+		DockerfileDefault {
+			alpine: &self.alpine,
+			pubkey: &self.pubkey,
+			rustver: format!("1.{}", ver.rustminor)
+		}
+	}
+
+	fn dockerfile_minimal<'a>(&'a self, ver: &'a APKBUILD) -> DockerfileMinimal<'a> {
+		DockerfileMinimal {
+			alpine: &self.alpine,
+			pubkey: &self.pubkey,
+			rustver: format!("1.{}", ver.rustminor)
+		}
+	}
 }
 
 lazy_static! {
