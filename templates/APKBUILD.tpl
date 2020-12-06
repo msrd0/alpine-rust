@@ -37,10 +37,10 @@ makedepends_build="
 	coreutils
 	llvm$_llvmver-dev
 	llvm$_llvmver-test-utils
-	{% if sysver.is_some() -%}
+	{%- if sysver.is_some() %}
 "
 # FIXME: not including cargo/rust dependencies because we're using packages from alpine-{{ sysver.as_deref().unwrap() }}
-	{% else -%}
+	{%- else %}
 	{% if bootsys %}rust=$_bootver{% else %}rust-$_bootver{% endif %}
 	{% if bootsys %}cargo=$_bootver{% else %}cargo-$_bootver{% endif %}
 "

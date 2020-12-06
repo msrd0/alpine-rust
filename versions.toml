@@ -52,7 +52,7 @@ rustminor = 45
 rustpatch = 2
 pkgrel = 1
 llvmver = 10
-bootver = "1.44.0"
+bootver = "1.44.0-r0"
 bootsys = true
 sha512sums = """
 5996f899d3677dd73487561d95b0bee6d6e33f7087f40806fa8176d685de9e6d42974344c855402a9fc634c0e91e0df6e33fcb3194b3e4296e1a1cb49defb98e  rustc-1.45.2-src.tar.gz
