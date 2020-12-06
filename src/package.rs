@@ -215,6 +215,7 @@ async fn docker_build_dockerfile(docker: &Docker, tag: &str, dockerfile: &str, c
 		BuildImageOptions {
 			t: tag,
 			pull: true,
+			nocache: true,
 			..Default::default()
 		},
 		None,

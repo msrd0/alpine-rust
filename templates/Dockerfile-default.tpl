@@ -6,10 +6,12 @@ RUN sed -i 's,http:,https:,g' /etc/apk/repositories \
  && apk add --no-cache \
       cargo-{{ rustver }} \
       clang \
+      clippy-{{ rustver }} \
       gcc \
       lld \
       musl-dev \
-      rust-{{ rustver }}
+      rust-{{ rustver }} \
+      rustfmt-{{ rustver }}
 
 ENV CC=/usr/bin/clang
 ENV CXX=/usr/bin/clang++

@@ -272,7 +272,7 @@ src() {
 _rustfmt() {
 	pkgdesc="Format Rust code"
 	license="Apache-2.0 MIT"
-	depends="cargo-$_rustver=$pkgver"
+	depends="cargo-$_rustver=$pkgver-r$pkgrel"
 	provides="rustfmt=$pkgver"
 	
 	_mv "$pkgdir"/usr/bin/cargo-fmt "$subpkgdir"/usr/bin
@@ -328,8 +328,8 @@ _cargo_doc() {
 _clippy() {
 	pkgdesc="A bunch of lints to catch common mistakes and improve your Rust code "
 	license="Apache-2.0 MIT"
-	depends="cargo-$_rustver=$pkgver"
-	provides="rustfmt=$pkgver"
+	depends="cargo-$_rustver=$pkgver-r$pkgrel"
+	provides="clippy=$pkgver"
 	
 	_mv "$pkgdir"/usr/bin/cargo-clippy "$subpkgdir"/usr/bin
 	_mv "$pkgdir"/usr/bin/clippy-driver "$subpkgdir"/usr/bin
