@@ -6,7 +6,7 @@ index eeb8d08..81e2001 100755
      fi
  }
  
-+try python3 ""
- try python2.7 ""
- try python27 ""
- try python2 ""
++try python3 "$@"
+ try python2.7 "$@"
+ try python27 "$@"
+ try python2 "$@"
