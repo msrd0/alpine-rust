@@ -63,12 +63,19 @@
 	
 	<h2>Setup Instructions</h2>
 	
-	To add this repository, execute the following commands:
+	<p>
+		To add this repository, execute the following commands:
+	</p>
+	
+	<p>
+		<b>WARNING:</b> The setup instructions are subject to change. Your setup may break at any time
+		it the future. Nothing about this is stable yet.
+	</p>
 	
 	<div class="shell">
 		<b>$</b> sudo wget -O "/etc/apk/keys/alpine@msrd0.de-5fc3c0b2.rsa.pub" \ <br/>
-		&nbsp;&nbsp;&nbsp;&nbsp;"https://msrd0.github.io/alpine-rust/alpine@msrd0.de-5fc3c0b2.rsa.pub" <br/>
-		<b>$</b> echo "https://msrd0.github.io/alpine-rust/3.12/alpine-rust" \ <br/>
+		&nbsp;&nbsp;&nbsp;&nbsp;"https://raw.githubusercontent.com/msrd0/alpine-rust/gh-pages/alpine@msrd0.de-5fc3c0b2.rsa.pub" <br/>
+		<b>$</b> echo "https://media.githubusercontent.com/media/msrd0/alpine-rust/gh-pages/3.12/alpine-rust" \ <br/>
 		&nbsp;&nbsp;&nbsp;&nbsp;| sudo tee -a /etc/apk/repositories <br/>
 		<b>$</b> sudo apk update
 	</div>
