@@ -152,12 +152,16 @@ steps:
     environment:
       GITHUB_TOKEN:
         from_secret: GITHUB_TOKEN
+      MINIO_ACCESS_KEY:
+        from_secret: MINIO_ACCESS_KEY
+      MINIO_SECRET_KEY:
+        from_secret: MINIO_SECRET_KEY
       RUST_LOG: info
       UPCLOUD_PASSWORD:
         from_secret: UPCLOUD_PASSWORD
     commands:
       - apt-get update -y
-      - apt-get install -y --no-install-recommends ca-certificates git git-lfs libgcc1 libssh2-1 libssl1.1
+      - apt-get install -y --no-install-recommends ca-certificates libgcc1 libssh2-1 libssl1.1
       - ./target/debug/alpine-rust
   
   - name: rebuild-cache
