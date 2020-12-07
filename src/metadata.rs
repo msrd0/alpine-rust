@@ -3,7 +3,7 @@ use askama::Template;
 use std::path::Path;
 use tokio::{
 	fs::{self, File},
-	io::{self, AsyncWriteExt}
+	io::AsyncWriteExt
 };
 
 pub(super) async fn update(config: &Config, repodir: &Path) {
@@ -22,7 +22,7 @@ pub(super) async fn update(config: &Config, repodir: &Path) {
 		.await
 		.expect("Unable to write index.html");
 	drop(index_html);
-	//if *CI {
-	repo::upload(&path, "index.html").await.expect("Failed to upload index.html");
-	//}
+	if *CI {
+		repo::upload(&path, "index.html").await.expect("Failed to upload index.html");
+	}
 }

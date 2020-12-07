@@ -8,13 +8,8 @@ use bollard::{Docker, API_DEFAULT_VERSION};
 use env::current_dir;
 use futures_util::{stream, FutureExt, StreamExt};
 use serde::Deserialize;
-use std::{
-	borrow::Cow,
-	env,
-	path::Path,
-	process::{exit, Command}
-};
-use tempfile::{tempdir, TempDir};
+use std::{borrow::Cow, env, process::exit};
+use tempfile::tempdir;
 use tokio::{
 	fs::{self, File},
 	io::AsyncReadExt
@@ -211,7 +206,7 @@ async fn main() {
 
 		// commit the changes
 		if let Some(mut server) = server.as_mut() {
-			if let Err(err) = upcloud::commit_changes(&config, ver, &repodir, &mut server).await {
+			if let Err(err) = upcloud::commit_changes(&config, &repodir, &mut server).await {
 				error!("Failed to commit changes: {}", err);
 				server.destroy().await.expect("Failed to destroy the server");
 				exit(1);

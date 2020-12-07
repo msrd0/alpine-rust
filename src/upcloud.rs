@@ -1,7 +1,7 @@
 use super::Config;
 use crate::{
 	docker::{gen_keys, DockerKeys},
-	repo, APKBUILD
+	repo
 };
 use futures_util::StreamExt;
 use rand::{distributions::Alphanumeric, thread_rng, Rng};
@@ -543,12 +543,7 @@ pub(super) async fn install_server(
 	})
 }
 
-pub(super) async fn commit_changes(
-	config: &Config,
-	ver: &APKBUILD,
-	repodir: &Path,
-	server: &mut UpcloudServer
-) -> anyhow::Result<()> {
+pub(super) async fn commit_changes(config: &Config, repodir: &Path, server: &mut UpcloudServer) -> anyhow::Result<()> {
 	// establish a new ssh session
 	let mut sess = connect(&server.domain, &server.password).await?;
 
