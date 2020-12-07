@@ -195,7 +195,7 @@ async fn main() {
 					num_cpus::get() as u16
 				)
 			};
-			if let Err(err) = package::build(&repodir, &docker, &config, ver, jobs).await {
+			if let Err(err) = package::build_package(&repodir, &docker, &config, ver, jobs).await {
 				error!("Failed to build package: {}", err);
 				if let Some(server) = server {
 					server.destroy().await.expect("Failed to destroy the server");
@@ -204,7 +204,7 @@ async fn main() {
 			}
 		}
 
-		// commit the changes
+		// upload the changes
 		if let Some(mut server) = server.as_mut() {
 			if let Err(err) = upcloud::commit_changes(&config, &repodir, &mut server).await {
 				error!("Failed to commit changes: {}", err);
@@ -213,6 +213,15 @@ async fn main() {
 			}
 		} else {
 			warn!("Not running in CI - No changes commited");
+		}
+
+		// build the docker images
+		if let Err(err) = package::build_docker(&docker, &config, ver).await {
+			error!("Failed to build docker images: {}", err);
+			if let Some(server) = server {
+				server.destroy().await.expect("Failed to destroy the server");
+			}
+			exit(1);
 		}
 	}
 

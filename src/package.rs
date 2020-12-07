@@ -263,13 +263,23 @@ async fn docker_push(docker: &Docker, tag: &str) -> anyhow::Result<()> {
 	Ok(())
 }
 
-pub(super) async fn build(repodir: &str, docker: &Docker, config: &Config, ver: &APKBUILD, jobs: u16) -> anyhow::Result<()> {
+pub(super) async fn build_package(
+	repodir: &str,
+	docker: &Docker,
+	config: &Config,
+	ver: &APKBUILD,
+	jobs: u16
+) -> anyhow::Result<()> {
 	info!("Building Rust 1.{}.{}", ver.rustminor, ver.rustpatch);
 
 	let img = format!("alpine-rust-builder-1.{}", ver.rustminor);
 	docker_build_abuild(docker, &img, config, ver, jobs).await?;
 	docker_run_abuild(docker, &img, repodir).await?;
 
+	Ok(())
+}
+
+pub(super) async fn build_docker(docker: &Docker, config: &Config, ver: &APKBUILD) -> anyhow::Result<()> {
 	let img = format!("ghcr.io/msrd0/alpine-rust:1.{}-minimal", ver.rustminor);
 	let dockerfile = config.dockerfile_minimal(ver).render()?;
 	docker_build_dockerfile(docker, &img, &dockerfile, config).await?;
