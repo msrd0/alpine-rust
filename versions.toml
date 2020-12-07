@@ -22,6 +22,17 @@ sha512sums = """
 9c1f857d8e5a8745e6452b55bd09e6505a9f013c2588fbf4e5da3f712ec0f7bb00b1385985d8a846a85bd8bb4f2fb92fac162b3bae6aade91f2f659ab93f6889  1.40.tar.gz
 """
 
+# 1.41.1 - built using 1.40.0 from this repo
+[[versions]]
+rustminor = 41
+rustpatch = 1
+pkgrel = 1
+llvmver = 9
+bootver = "1.40"
+bootsys = false
+sha512sums = """
+"""
+
 # 1.43.1
 # [[versions]]
 # rustminor = 43

@@ -1,7 +1,7 @@
 use super::Config;
 use crate::{
 	docker::{gen_keys, DockerKeys},
-	run_git, APKBUILD
+	repo, APKBUILD
 };
 use futures_util::StreamExt;
 use rand::{distributions::Alphanumeric, thread_rng, Rng};
@@ -567,41 +567,18 @@ pub(super) async fn commit_changes(
 		return Ok(());
 	}
 
-	// download those files and add them to git
-	let mut err: Option<&'static str> = None;
+	// download those files and upload to the repo
+	let mut res: anyhow::Result<()> = Ok(());
 	for file in &updated {
 		let path = format!("{}/alpine-rust/x86_64/{}", config.alpine, file);
-		download(&mut sess, &format!("{}/{}", dir, file), &repodir.join(&path)).await?;
-		if !run_git(repodir, &["lfs", "track", &path]) {
-			error!("Unable to track {} with git lfs", file);
-			err = Some("Unable to track file with git lfs");
-		}
-		if !run_git(repodir, &["add", &path]) {
-			error!("Unable to add {} to git", file);
-			err = Some("Unable to add files to git");
+		let dest = repodir.join(&path);
+		download(&mut sess, &format!("{}/{}", dir, file), &dest).await?;
+		if let Err(err) = repo::upload(&dest, &path).await {
+			error!("Error uploading {}: {}", path, err);
+			res = Err(err);
 		}
 	}
-
-	// create the commit
-	info!("Commiting changes for rust-1.{}", ver.rustminor);
-	let msg = format!("Update rust-1.{} package for alpine {}", ver.rustminor, config.alpine);
-	if !run_git(repodir, &["add", ".gitattributes"]) {
-		error!("Failed to add .gitattributes to git");
-		err = Some("Unable to add .gitattributes to git");
-	}
-	if !run_git(repodir, &["commit", "-m", &msg]) {
-		error!("Failed to create commit");
-		err = Some("Failed to create commit");
-	}
-	if !run_git(repodir, &["push"]) {
-		error!("Failed to push commit");
-		err = Some("Failed to push commit");
-	}
-
-	if let Some(err) = err {
-		return Err(anyhow::Error::msg(err));
-	}
-	Ok(())
+	res
 }
 
 const DOCKER_SYSTEMD_UNIT: &str = r#"

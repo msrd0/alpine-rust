@@ -24,6 +24,7 @@ use upcloud::UPCLOUD_CORES;
 mod docker;
 mod metadata;
 mod package;
+mod repo;
 mod upcloud;
 
 #[derive(Deserialize, Template)]
@@ -108,51 +109,6 @@ lazy_static! {
 	static ref GITHUB_TOKEN: String = env::var("GITHUB_TOKEN").expect("GITHUB_TOKEN must be set");
 }
 
-const GIT_NAME: &str = "drone.msrd0.eu [bot]";
-const GIT_EMAIL: &str = "noreply@drone.msrd0.eu";
-
-fn run_git(dir: &Path, args: &[&str]) -> bool {
-	let status = Command::new("git")
-		.args(args)
-		.current_dir(dir)
-		.env("GIT_AUTHOR_NAME", GIT_NAME)
-		.env("GIT_AUTHOR_EMAIL", GIT_EMAIL)
-		.env("GIT_COMMITTER_NAME", GIT_NAME)
-		.env("GIT_COMMITTER_EMAIL", GIT_EMAIL)
-		.status()
-		.expect("Failed to run git");
-	status.success()
-}
-
-fn git_clone() -> TempDir {
-	info!("Cloning git repository");
-	let repodir = tempdir().expect("Failed to create tempdir");
-	let repourl = format!(
-		"https://drone-msrd0-eu:{}@github.com/msrd0/alpine-rust",
-		GITHUB_TOKEN.as_str()
-	);
-	if !run_git("/".as_ref(), &[
-		"clone",
-		"--branch=gh-pages",
-		"--depth=1",
-		&repourl,
-		&repodir.path().to_string_lossy()
-	]) {
-		error!("Failed to clone git repo");
-		exit(1);
-	}
-	if !run_git(repodir.path(), &["config", "user.name", GIT_NAME]) {
-		error!("Failed to set git user.name config");
-		exit(1);
-	}
-	if !run_git(repodir.path(), &["config", "user.email", GIT_EMAIL]) {
-		error!("Failed to set git user.email config");
-		exit(1);
-	}
-
-	repodir
-}
-
 #[tokio::main]
 async fn main() {
 	pretty_env_logger::init_timed();
@@ -167,15 +123,10 @@ async fn main() {
 	drop(config_file);
 	let config: Config = toml::from_slice(&config_buf).expect("Invalid syntax in versions.toml");
 
-	// clone the git repo
-	let (_repotmpdir, repodir) = if *CI {
-		let dir = git_clone();
-		let path = dir.path().to_owned();
-		(Some(dir), path)
-	} else {
-		let dir = current_dir().unwrap().join("repo");
-		(None, dir)
-	};
+	// download the repository
+	let repotmp = tempdir().expect("Failed to create tempdir");
+	let repodir = repotmp.path();
+	repo::download(&repodir).await.expect("Failed to download repo");
 
 	// create the repo dir if it does not exist yet
 	if let Err(err) = fs::create_dir_all(repodir.join(format!("{}/alpine-rust/x86_64", config.alpine))).await {
