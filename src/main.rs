@@ -8,7 +8,7 @@ use bollard::{Docker, API_DEFAULT_VERSION};
 use env::current_dir;
 use futures_util::{stream, FutureExt, StreamExt};
 use serde::Deserialize;
-use std::{borrow::Cow, env, process::exit};
+use std::{borrow::Cow, collections::HashSet, env, process::exit};
 use tempfile::tempdir;
 use tokio::{
 	fs::{self, File},
@@ -132,16 +132,32 @@ async fn main() {
 	metadata::update(&config, &repodir).await;
 
 	// search for versions that need to be updated
-	let pkg_updates = stream::iter(config.versions.iter())
-		.filter(|ver| package::up_to_date(&repodir, &config, ver).map(|up_to_date| !up_to_date))
-		.collect::<Vec<_>>()
-		.await;
+	let args = env::args().collect::<HashSet<_>>();
+	let pkg_updates;
+	if args.is_empty() {
+		pkg_updates = stream::iter(config.versions.iter())
+			.filter(|ver| package::up_to_date(&repodir, &config, ver).map(|up_to_date| !up_to_date))
+			.collect::<Vec<_>>()
+			.await;
+	} else {
+		pkg_updates = config
+			.versions
+			.iter()
+			.filter(|ver| args.contains(&format!("1.{}", ver.rustminor)))
+			.collect::<Vec<_>>()
+	}
 
 	// if everything is up to date, simply exit
 	if pkg_updates.is_empty() {
 		info!("Everything is up to date");
 		return;
 	}
+	let pkg_updates_str = pkg_updates
+		.iter()
+		.map(|ver| format!("1.{}", ver.rustminor))
+		.collect::<Vec<_>>()
+		.join(", ");
+	info!("The following rust versions will be updated: {}", pkg_updates_str);
 
 	// upcloud for CI, local for non-CI
 	let (mut server, docker) = if *CI {
