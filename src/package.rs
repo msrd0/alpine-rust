@@ -1,4 +1,4 @@
-use super::{Config, APKBUILD, GITHUB_TOKEN};
+use super::{Config, Version, GITHUB_TOKEN};
 use askama::Template;
 use bollard::{
 	auth::DockerCredentials,
@@ -15,7 +15,7 @@ use tokio::{
 	time::{delay_for, Duration}
 };
 
-pub(super) async fn up_to_date(repodir: &Path, config: &Config, ver: &APKBUILD) -> bool {
+pub(super) async fn up_to_date(repodir: &Path, config: &Config, ver: &Version) -> bool {
 	let path = format!(
 		"{alpine}/alpine-rust/x86_64/rust-1.{minor}-1.{minor}.{patch}-r{pkgrel}.apk",
 		alpine = config.alpine,
@@ -88,11 +88,11 @@ async fn build_tar(
 	Ok(tar_buf)
 }
 
-async fn docker_build_abuild(docker: &Docker, tag: &str, config: &Config, ver: &APKBUILD, jobs: u16) -> anyhow::Result<()> {
+async fn docker_build_abuild(docker: &Docker, tag: &str, config: &Config, ver: &Version, jobs: u16) -> anyhow::Result<()> {
 	info!("Building Docker image {}", tag);
 
 	// create the context tar for docker build
-	let apkbuild = ver.render()?;
+	let apkbuild: String = ver.apkbuild().render()?;
 	let dockerfile = config.dockerfile_abuild(ver, jobs).render()?;
 	let tar = build_tar(Some(&apkbuild), &dockerfile, &config.pubkey, Some(&config.privkey)).await?;
 
@@ -267,7 +267,7 @@ pub(super) async fn build_package(
 	repodir: &str,
 	docker: &Docker,
 	config: &Config,
-	ver: &APKBUILD,
+	ver: &Version,
 	jobs: u16
 ) -> anyhow::Result<()> {
 	info!("Building Rust 1.{}.{}", ver.rustminor, ver.rustpatch);
@@ -279,7 +279,7 @@ pub(super) async fn build_package(
 	Ok(())
 }
 
-pub(super) async fn build_docker(docker: &Docker, config: &Config, ver: &APKBUILD) -> anyhow::Result<()> {
+pub(super) async fn build_docker(docker: &Docker, config: &Config, ver: &Version) -> anyhow::Result<()> {
 	let img = format!("ghcr.io/msrd0/alpine-rust:1.{}-minimal", ver.rustminor);
 	let dockerfile = config.dockerfile_minimal(ver).render()?;
 	docker_build_dockerfile(docker, &img, &dockerfile, config).await?;

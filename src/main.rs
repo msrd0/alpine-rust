@@ -3,11 +3,9 @@ extern crate lazy_static;
 #[macro_use]
 extern crate log;
 
-use askama::Template;
 use bollard::{Docker, API_DEFAULT_VERSION};
 use env::current_dir;
 use futures_util::{stream, FutureExt, StreamExt};
-use serde::Deserialize;
 use std::{borrow::Cow, collections::HashSet, env, process::exit};
 use tempfile::tempdir;
 use tokio::{
@@ -16,88 +14,15 @@ use tokio::{
 };
 use upcloud::UPCLOUD_CORES;
 
+mod config;
 mod docker;
 mod metadata;
 mod package;
 mod repo;
+mod templates;
 mod upcloud;
 
-#[derive(Deserialize, Template)]
-#[template(path = "APKBUILD.tpl", escape = "none")]
-struct APKBUILD {
-	rustminor: u32,
-	rustpatch: u32,
-	pkgrel: u32,
-	llvmver: u32,
-	bootver: String,
-	bootsys: bool,
-	sysver: Option<String>,
-	python: Option<String>,
-	sha512sums: String
-}
-
-#[derive(Deserialize, Template)]
-#[template(path = "index.html")]
-struct Config {
-	alpine: String,
-	pubkey: String,
-	privkey: String,
-	versions: Vec<APKBUILD>
-}
-
-#[derive(Template)]
-#[template(path = "Dockerfile-abuild.tpl", escape = "none")]
-struct DockerfileAbuild<'a> {
-	alpine: &'a str,
-	pubkey: &'a str,
-	privkey: &'a str,
-	sysver: Option<&'a str>,
-	jobs: u16
-}
-
-#[derive(Template)]
-#[template(path = "Dockerfile-default.tpl", escape = "none")]
-struct DockerfileDefault<'a> {
-	alpine: &'a str,
-	pubkey: &'a str,
-	rustver: String
-}
-
-#[derive(Template)]
-#[template(path = "Dockerfile-minimal.tpl", escape = "none")]
-struct DockerfileMinimal<'a> {
-	alpine: &'a str,
-	pubkey: &'a str,
-	rustver: String
-}
-
-impl Config {
-	fn dockerfile_abuild<'a>(&'a self, ver: &'a APKBUILD, jobs: u16) -> DockerfileAbuild<'a> {
-		DockerfileAbuild {
-			alpine: &self.alpine,
-			pubkey: &self.pubkey,
-			privkey: &self.privkey,
-			sysver: ver.sysver.as_deref(),
-			jobs
-		}
-	}
-
-	fn dockerfile_default<'a>(&'a self, ver: &'a APKBUILD) -> DockerfileDefault<'a> {
-		DockerfileDefault {
-			alpine: &self.alpine,
-			pubkey: &self.pubkey,
-			rustver: format!("1.{}", ver.rustminor)
-		}
-	}
-
-	fn dockerfile_minimal<'a>(&'a self, ver: &'a APKBUILD) -> DockerfileMinimal<'a> {
-		DockerfileMinimal {
-			alpine: &self.alpine,
-			pubkey: &self.pubkey,
-			rustver: format!("1.{}", ver.rustminor)
-		}
-	}
-}
+use config::*;
 
 lazy_static! {
 	static ref CI: bool = env::var("CI").is_ok();
@@ -108,13 +33,13 @@ lazy_static! {
 async fn main() {
 	pretty_env_logger::init_timed();
 
-	info!("Reading versions.toml");
-	let mut config_file = File::open("versions.toml").await.expect("Unable to find versions.toml");
+	info!("Reading config.toml");
+	let mut config_file = File::open("config.toml").await.expect("Unable to find config.toml");
 	let mut config_buf = Vec::<u8>::new();
 	config_file
 		.read_to_end(&mut config_buf)
 		.await
-		.expect("Unable to read versions.toml");
+		.expect("Unable to read config.toml");
 	drop(config_file);
 	let config: Config = toml::from_slice(&config_buf).expect("Invalid syntax in versions.toml");
 
