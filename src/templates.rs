@@ -27,6 +27,24 @@ impl Config {
 		}
 	}
 
+	pub fn caddyfile<'a>(&'a self) -> impl Template + 'a {
+		#[derive(Template)]
+		#[template(path = "caddy/Caddyfile")]
+		struct Caddyfile<'t> {
+			alpine: &'t str
+		}
+
+		Caddyfile { alpine: &self.alpine }
+	}
+
+	pub fn caddy_dockerfile<'a>(&'a self) -> impl Template + 'a {
+		#[derive(Template)]
+		#[template(path = "caddy/Dockerfile")]
+		struct Dockerfile;
+
+		Dockerfile
+	}
+
 	pub fn rust_dockerfile_abuild<'a>(&'a self, ver: &'a Version, jobs: u16) -> impl Template + 'a {
 		#[derive(Template)]
 		#[template(path = "rust/abuild.Dockerfile")]

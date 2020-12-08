@@ -1,170 +1,146 @@
-use openssl::{
-	asn1::{Asn1Integer, Asn1Time},
-	bn::BigNum,
-	ec::{EcGroup, EcKey},
-	hash::MessageDigest,
-	nid::Nid,
-	pkey::{HasPrivate, PKey},
-	rsa::Rsa,
-	x509::{
-		extension::{BasicConstraints, ExtendedKeyUsage, SubjectAlternativeName, SubjectKeyIdentifier},
-		X509Builder, X509NameBuilder, X509
-	}
+use crate::Config;
+use anyhow::Context;
+use askama::Template;
+use bollard::{
+	container,
+	container::StopContainerOptions,
+	image::BuildImageOptions,
+	models::{HostConfig, Mount, MountTypeEnum, PortBinding},
+	Docker
 };
-use rand::{distributions::Alphanumeric, thread_rng, Rng};
-use std::path::{Path, PathBuf};
-use tempfile::{tempdir, TempDir};
-use tokio::{fs::File, io::AsyncWriteExt};
+use futures_util::StreamExt;
+use std::{collections::HashMap, io::Cursor};
 
-fn serial_number() -> anyhow::Result<Asn1Integer> {
-	let hex = thread_rng()
-		.sample_iter(Alphanumeric)
-		.filter(|char| char.is_digit(16))
-		.take(40)
-		.collect::<String>();
-	let bn = BigNum::from_hex_str(&hex)?;
-	Ok(Asn1Integer::from_bn(&bn)?)
+const CADDY_IMG: &str = "alpine-rust-caddy";
+
+pub fn tar_header(path: &str, len: usize) -> tar::Header {
+	let mut header = tar::Header::new_old();
+	header.set_path(path).unwrap();
+	header.set_mode(0o644);
+	header.set_uid(0);
+	header.set_gid(0);
+	header.set_size(len as u64);
+	header.set_cksum();
+	header
 }
 
-async fn write_privkey_pem<T: HasPrivate>(key: &Rsa<T>, path: &Path) -> anyhow::Result<()> {
-	info!("Writing key file {}", path.to_string_lossy());
-	let pem = key.private_key_to_pem()?;
-	let mut file = File::create(path).await?;
-	file.write_all(&pem).await?;
+async fn build_tar(caddyfile: &str, dockerfile: &str) -> anyhow::Result<Vec<u8>> {
+	let mut tar_buf: Vec<u8> = Vec::new();
+	let mut tar = tar::Builder::new(&mut tar_buf);
+
+	// write the Caddyfile file
+	let bytes = caddyfile.as_bytes();
+	let header = tar_header("Caddyfile", bytes.len());
+	tar.append(&header, Cursor::new(bytes))?;
+
+	// write the Dockerfile file
+	let bytes = dockerfile.as_bytes();
+	let header = tar_header("Dockerfile", bytes.len());
+	tar.append(&header, Cursor::new(bytes))?;
+
+	// finish the tar archive
+	tar.finish()?;
+	drop(tar);
+	Ok(tar_buf)
+}
+
+pub async fn build_caddy(docker: &Docker, config: &Config, repomount: &str) -> anyhow::Result<()> {
+	info!("Building Docker image {}", CADDY_IMG);
+
+	// create the context tar for docker build
+	let caddyfile: String = config.caddyfile().render()?;
+	let dockerfile = config.caddy_dockerfile().render()?;
+	let tar = build_tar(&caddyfile, &dockerfile).await?;
+
+	// build the docker image
+	let mut img_stream = docker.build_image(
+		BuildImageOptions {
+			t: CADDY_IMG,
+			pull: true,
+			..Default::default()
+		},
+		None,
+		Some(tar.into())
+	);
+	while let Some(status) = img_stream.next().await {
+		let status = status.expect("Failed to build image");
+		if let Some(log) = status.stream {
+			print!("{}", log);
+		}
+		if let Some(err) = status.error {
+			print!("{}", err);
+			return Err(anyhow::Error::msg(format!("Failed to build docker image {}", CADDY_IMG)));
+		}
+	}
+	info!("Built Docker image {}", CADDY_IMG);
 	Ok(())
 }
 
-async fn write_x509_pem(x509: &X509, path: &Path) -> anyhow::Result<()> {
-	info!("Writing x509 file {}", path.to_string_lossy());
-	let pem = x509.to_pem()?;
-	let mut file = File::create(path).await?;
-	file.write_all(&pem).await?;
-	Ok(())
+pub struct CaddyContainer {
+	container_id: String
 }
 
-pub(super) struct DockerKeys {
-	tmpdir: TempDir,
-	pub(super) ca_pem: Vec<u8>,
-	pub(super) server_cert_pem: Vec<u8>,
-	pub(super) server_key_pem: Vec<u8>
-}
+pub async fn start_caddy(docker: &Docker, repomount: &str) -> anyhow::Result<CaddyContainer> {
+	info!("Creating caddy container");
 
-impl DockerKeys {
-	pub(super) fn ca_path(&self) -> PathBuf {
-		self.tmpdir.path().join("ca.pem")
-	}
+	// port config
+	let mut ports: HashMap<&str, HashMap<(), ()>> = HashMap::new();
+	ports.insert("2015/tcp", Default::default());
+	let mut port_bindings: HashMap<String, Option<Vec<PortBinding>>> = HashMap::new();
+	port_bindings.insert(
+		"2015/tcp".to_owned(),
+		Some(vec![PortBinding {
+			host_ip: None,
+			host_port: Some("2015".to_owned())
+		}])
+	);
 
-	pub(super) fn client_key_path(&self) -> PathBuf {
-		self.tmpdir.path().join("client-key.pem")
-	}
+	// volume config
+	let mut volumes: HashMap<&str, HashMap<(), ()>> = HashMap::new();
+	volumes.insert("/repo", Default::default());
+	let mut mounts: Vec<Mount> = Vec::new();
+	mounts.push(Mount {
+		target: Some("/repo".to_owned()),
+		source: Some(repomount.to_owned()),
+		typ: Some(MountTypeEnum::BIND),
+		read_only: Some(true),
+		..Default::default()
+	});
 
-	pub(super) fn client_cert_path(&self) -> PathBuf {
-		self.tmpdir.path().join("client.pem")
-	}
-}
+	// create the container
+	let container = docker
+		.create_container::<String, &str>(None, container::Config {
+			attach_stdout: Some(false),
+			attach_stderr: Some(false),
+			image: Some(CADDY_IMG),
+			volumes: Some(volumes),
+			host_config: Some(HostConfig {
+				mounts: Some(mounts),
+				..Default::default()
+			}),
+			..Default::default()
+		})
+		.await
+		.context("Unable to create caddy container")?;
+	info!("Created container {}", container.id);
 
-pub(super) async fn gen_keys(_ip: &str, domain: &str) -> anyhow::Result<DockerKeys> {
-	info!("Generating Docker Keys");
+	// start the container
+	docker.start_container::<String>(&container.id, None).await?;
+	info!("Started container {}", container.id);
 
-	let secp384r1 = EcGroup::from_curve_name(Nid::SECP384R1)?;
-	let sha256 = MessageDigest::from_nid(Nid::SHA256).ok_or(anyhow::Error::msg("SHA256 unknown to openssl"))?;
-
-	let keydir = tempdir()?;
-	let dir = keydir.path();
-
-	let mut ca_name = X509NameBuilder::new()?;
-	ca_name.append_entry_by_text("C", "DE")?;
-	ca_name.append_entry_by_text("O", "Temporary CA")?;
-	ca_name.append_entry_by_text("CN", domain)?;
-	let ca_name = ca_name.build();
-
-	let mut server_name = X509NameBuilder::new()?;
-	server_name.append_entry_by_text("C", "DE")?;
-	server_name.append_entry_by_text("O", "Server Certificate")?;
-	server_name.append_entry_by_text("CN", domain)?;
-	let server_name = server_name.build();
-
-	let mut client_name = X509NameBuilder::new()?;
-	client_name.append_entry_by_text("C", "DE")?;
-	client_name.append_entry_by_text("O", "Client Certificate")?;
-	client_name.append_entry_by_text("CN", domain)?;
-	let client_name = client_name.build();
-
-	let now = Asn1Time::days_from_now(0)?;
-	let next_week = Asn1Time::days_from_now(7)?;
-
-	let ca_key = EcKey::generate(&secp384r1)?;
-	let ca_keypair = PKey::from_ec_key(ca_key)?;
-
-	let mut ca_cert = X509Builder::new()?;
-	ca_cert.set_serial_number(serial_number()?.as_ref())?;
-	ca_cert.set_not_before(&now)?;
-	ca_cert.set_not_after(&next_week)?;
-	ca_cert.set_version(2)?;
-	ca_cert.set_issuer_name(&ca_name)?;
-	ca_cert.set_subject_name(&ca_name)?;
-	ca_cert.set_pubkey(&ca_keypair)?;
-	let ca_cert_ctx = ca_cert.x509v3_context(None, None);
-	let ca_cert_ext_alt = SubjectAlternativeName::new().dns(domain).build(&ca_cert_ctx)?;
-	let ca_cert_ext_ski = SubjectKeyIdentifier::new().build(&ca_cert_ctx)?;
-	let mut ca_cert_ext_bc = BasicConstraints::new();
-	ca_cert_ext_bc.critical();
-	ca_cert_ext_bc.ca();
-	ca_cert.append_extension(ca_cert_ext_alt)?;
-	ca_cert.append_extension(ca_cert_ext_ski)?;
-	ca_cert.append_extension(ca_cert_ext_bc.build()?)?;
-	ca_cert.sign(&ca_keypair, sha256)?;
-	let ca_cert = ca_cert.build();
-	let ca_pem = ca_cert.to_pem()?;
-	write_x509_pem(&ca_cert, &dir.join("ca.pem")).await?;
-
-	let server_key = EcKey::generate(&secp384r1)?;
-	let server_key_pem = server_key.private_key_to_pem()?;
-	let server_pubkey = PKey::from_ec_key(server_key)?;
-
-	let mut server_cert = X509Builder::new()?;
-	server_cert.set_serial_number(serial_number()?.as_ref())?;
-	server_cert.set_not_before(&now)?;
-	server_cert.set_not_after(&next_week)?;
-	server_cert.set_version(2)?;
-	server_cert.set_issuer_name(&ca_name)?;
-	server_cert.set_subject_name(&server_name)?;
-	server_cert.set_pubkey(&server_pubkey)?;
-	let server_cert_ctx = server_cert.x509v3_context(None, None);
-	let server_cert_ext_alt = SubjectAlternativeName::new().dns(domain).build(&server_cert_ctx)?;
-	let server_cert_ext_usage = ExtendedKeyUsage::new().server_auth().build()?;
-	server_cert.append_extension(server_cert_ext_alt)?;
-	server_cert.append_extension(server_cert_ext_usage)?;
-	server_cert.sign(&ca_keypair, sha256)?;
-	let server_cert = server_cert.build();
-	let mut server_cert_pem = server_cert.to_pem()?;
-	server_cert_pem.extend_from_slice(&ca_pem);
-
-	let client_key = Rsa::generate(4096)?;
-	write_privkey_pem(&client_key, &dir.join("client-key.pem")).await?;
-	let client_pubkey = PKey::from_rsa(client_key)?;
-
-	let mut client_cert = X509Builder::new()?;
-	client_cert.set_serial_number(serial_number()?.as_ref())?;
-	client_cert.set_not_before(&now)?;
-	client_cert.set_not_after(&next_week)?;
-	client_cert.set_version(2)?;
-	client_cert.set_issuer_name(&ca_name)?;
-	client_cert.set_subject_name(&client_name)?;
-	client_cert.set_pubkey(&client_pubkey)?;
-	let client_cert_ctx = client_cert.x509v3_context(None, None);
-	let client_cert_ext_alt = SubjectAlternativeName::new().dns(domain).build(&client_cert_ctx)?;
-	let client_cert_ext_usage = ExtendedKeyUsage::new().client_auth().build()?;
-	client_cert.append_extension(client_cert_ext_alt)?;
-	client_cert.append_extension(client_cert_ext_usage)?;
-	client_cert.sign(&ca_keypair, sha256)?;
-	let client_cert = client_cert.build();
-	write_x509_pem(&client_cert, &dir.join("client.pem")).await?;
-
-	Ok(DockerKeys {
-		tmpdir: keydir,
-		ca_pem,
-		server_cert_pem,
-		server_key_pem
+	Ok(CaddyContainer {
+		container_id: container.id
 	})
+}
+
+impl CaddyContainer {
+	pub async fn stop(self, docker: &Docker) -> anyhow::Result<()> {
+		info!("Stopping caddy container {}", self.container_id);
+
+		docker
+			.stop_container(&self.container_id, Some(StopContainerOptions { t: 5 }))
+			.await?;
+
+		Ok(())
+	}
 }

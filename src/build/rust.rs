@@ -1,4 +1,4 @@
-use crate::{Config, Version, GITHUB_TOKEN};
+use crate::{docker::tar_header, Config, Version, GITHUB_TOKEN};
 use askama::Template;
 use bollard::{
 	auth::DockerCredentials,
@@ -32,17 +32,6 @@ pub async fn up_to_date(repodir: &Path, config: &Config, ver: &Version) -> bool 
 			exit(1);
 		}
 	}
-}
-
-fn tar_header(path: &str, len: usize) -> tar::Header {
-	let mut header = tar::Header::new_old();
-	header.set_path(path).unwrap();
-	header.set_mode(0o644);
-	header.set_uid(0);
-	header.set_gid(0);
-	header.set_size(len as u64);
-	header.set_cksum();
-	header
 }
 
 async fn build_tar(

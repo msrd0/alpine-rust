@@ -1,0 +1,13 @@
+:2015
+
+file_server {
+	root /repo/{{ alpine }}/alpine-rust
+}
+
+handle_errors {
+	rewrite /* /alpine-rust/{{ alpine }}/alpine-rust{path}
+
+	reverse_proxy https://msrd0cdn.de {
+		header_up Host msrd0cdn.de
+	}
+}

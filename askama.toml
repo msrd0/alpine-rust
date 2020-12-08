@@ -1,3 +1,4 @@
+# This file defines custom extensions for askama.
 
 # APKBUILD are shell files and Dockerfile's are similar to shell files so we
 # might want to use a shell-like escaper in the future
@@ -5,3 +6,8 @@
 # ::askama::Text does not escape anything
 path = "::askama::Text"
 extensions = ["APKBUILD", "Dockerfile"]
+
+# Caddyfile is a custom syntax that we'll just tread like text for now
+[[escaper]]
+path = "::askama::Text"
+extensions = ["Caddyfile"]

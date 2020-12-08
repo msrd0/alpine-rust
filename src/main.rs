@@ -8,6 +8,7 @@ use env::current_dir;
 use futures_util::{stream, FutureExt, StreamExt};
 
 use log::LevelFilter;
+use server::upcloud::UPCLOUD_CORES;
 use std::{borrow::Cow, env, path::PathBuf, process::exit};
 use structopt::StructOpt;
 use tempfile::tempdir;
@@ -15,15 +16,14 @@ use tokio::{
 	fs::{self, File},
 	io::AsyncReadExt
 };
-use upcloud::UPCLOUD_CORES;
 
 mod build;
 mod config;
 mod docker;
 mod metadata;
 mod repo;
+mod server;
 mod templates;
-mod upcloud;
 
 use config::*;
 
@@ -162,9 +162,11 @@ async fn main() {
 		(None, docker)
 	} else if args.docker_upcloud {
 		// create an upcloud server
-		let server = upcloud::create_server().await.expect("Failed to create UpCloud server");
+		let server = server::upcloud::create_server()
+			.await
+			.expect("Failed to create UpCloud server");
 
-		let server = match upcloud::install_server(&config, &server, &repodir).await {
+		let server = match server::upcloud::install_server(&config, &server, &repodir).await {
 			Ok(server) => server,
 			Err(err) => {
 				error!("Failed to install server: {}", err);
@@ -199,19 +201,34 @@ async fn main() {
 		exit(1);
 	};
 
+	// determine the docker environment
+	let (repomount, jobs) = match &server {
+		Some(_) => (Cow::Borrowed("/var/lib/alpine-rust"), UPCLOUD_CORES),
+		None => (
+			current_dir().unwrap().join("repo").to_string_lossy().to_string().into(),
+			num_cpus::get() as u16
+		)
+	};
+
+	// start our local caddy server
+	if let Err(err) = docker::build_caddy(&docker, &config, &repomount).await {
+		error!("Unable to build caddy image: {}", err);
+		exit(1);
+	}
+	let caddy = match docker::start_caddy(&docker, &repomount).await {
+		Ok(caddy) => caddy,
+		Err(err) => {
+			error!("Unable to start caddy container: {}", err);
+			exit(1);
+		}
+	};
+
 	// update packages
 	for ver in pkg_updates {
 		// build the package
 		if args.skip_rust_packages {
 			info!("Skipping rust packages for 1.{}", ver.rustminor);
 		} else {
-			let (repomount, jobs) = match &server {
-				Some(_) => (Cow::Borrowed("/var/lib/alpine-rust"), UPCLOUD_CORES),
-				None => (
-					current_dir().unwrap().join("repo").to_string_lossy().to_string().into(),
-					num_cpus::get() as u16
-				)
-			};
 			if let Err(err) = build::rust::build_package(&repomount, &docker, &config, ver, jobs).await {
 				error!("Failed to build package: {}", err);
 				if let Some(server) = server {
@@ -223,7 +240,7 @@ async fn main() {
 			// upload the changes
 			if args.upload_packages {
 				if let Some(mut server) = server.as_mut() {
-					if let Err(err) = upcloud::commit_changes(&config, &repodir, &mut server).await {
+					if let Err(err) = server::upcloud::commit_changes(&config, &repodir, &mut server).await {
 						error!("Failed to commit changes: {}", err);
 						server.destroy().await.expect("Failed to destroy the server");
 						exit(1);
@@ -247,6 +264,11 @@ async fn main() {
 				exit(1);
 			}
 		}
+	}
+
+	// stop the caddy container
+	if let Err(err) = caddy.stop(&docker).await {
+		error!("Unable to stop caddy: {}", err);
 	}
 
 	// remove the server

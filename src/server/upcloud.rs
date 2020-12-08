@@ -1,8 +1,5 @@
-use super::Config;
-use crate::{
-	docker::{gen_keys, DockerKeys},
-	repo
-};
+use super::docker_keys::{gen_keys, DockerKeys};
+use crate::{repo, Config};
 use futures_util::StreamExt;
 use rand::{distributions::Alphanumeric, thread_rng, Rng};
 use serde::{Deserialize, Serialize};
@@ -84,7 +81,7 @@ struct StorageDevice<'a> {
 }
 
 #[derive(Deserialize)]
-pub(super) struct ServerResponse {
+pub struct ServerResponse {
 	server: Server
 }
 
@@ -408,24 +405,24 @@ async fn download(sess: &mut Session, path: &str, host: &Path) -> anyhow::Result
 }
 
 #[allow(dead_code)]
-pub(super) struct UpcloudServer {
-	pub(super) ip: String,
-	pub(super) domain: String,
+pub struct UpcloudServer {
+	pub ip: String,
+	pub domain: String,
 	password: String,
 	uuid: String,
-	pub(super) keys: DockerKeys,
+	pub keys: DockerKeys,
 	repo_dir: String,
 	repo_index: HashMap<String, String>
 }
 
 impl UpcloudServer {
-	pub(super) async fn destroy(&self) -> anyhow::Result<()> {
+	pub async fn destroy(&self) -> anyhow::Result<()> {
 		destroy_server(&self.uuid).await
 	}
 }
 
 impl ServerResponse {
-	pub(super) async fn destroy(&self) -> anyhow::Result<()> {
+	pub async fn destroy(&self) -> anyhow::Result<()> {
 		destroy_server(self.uuid()).await
 	}
 }
@@ -454,7 +451,7 @@ fn ip_last_parts(ip: &str) -> String {
 	parts.join("-")
 }
 
-pub(super) async fn create_server() -> anyhow::Result<ServerResponse> {
+pub async fn create_server() -> anyhow::Result<ServerResponse> {
 	let rng = thread_rng();
 	let hostname = rng.sample_iter(Alphanumeric).take(10).collect::<String>();
 	let title = format!("alpine-rust-{}", hostname);
@@ -466,11 +463,7 @@ pub(super) async fn create_server() -> anyhow::Result<ServerResponse> {
 	Ok(req.send(username, &password).await?)
 }
 
-pub(super) async fn install_server(
-	config: &Config,
-	server: &ServerResponse,
-	repodir: &Path
-) -> anyhow::Result<UpcloudServer> {
+pub async fn install_server(config: &Config, server: &ServerResponse, repodir: &Path) -> anyhow::Result<UpcloudServer> {
 	let ip = server.ip_addr().ok_or(anyhow::Error::msg("Server does not have an IP"))?;
 	let password = server.password();
 	let uuid = server.uuid();
@@ -543,7 +536,7 @@ pub(super) async fn install_server(
 	})
 }
 
-pub(super) async fn commit_changes(config: &Config, repodir: &Path, server: &mut UpcloudServer) -> anyhow::Result<()> {
+pub async fn commit_changes(config: &Config, repodir: &Path, server: &mut UpcloudServer) -> anyhow::Result<()> {
 	// establish a new ssh session
 	let mut sess = connect(&server.domain, &server.password).await?;
 
