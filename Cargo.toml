@@ -2,9 +2,13 @@
 
 [package]
 name = "alpine-rust"
-version = "0.1.0"
+version = "0.0.0"
 authors = ["Dominic <git@msrd0.de>"]
 edition = "2018"
+license = "GPL-3.0"
+
+# do not publish to crates.io
+publish = false
 
 [dependencies]
 anyhow = "1.0"
@@ -23,6 +27,7 @@ rust-s3 = { version = "0.26", features = ["rustls-tls"], default-features = fals
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 ssh2 = "0.9"
+structopt = "0.3"
 tar = "0.4"
 tempfile = "3.1"
 toml = "0.5"

@@ -120,7 +120,7 @@ async fn docker_build_abuild(docker: &Docker, tag: &str, config: &Config, ver: &
 	Ok(())
 }
 
-async fn docker_run_abuild(docker: &Docker, img: &str, repodir: &str) -> anyhow::Result<()> {
+async fn docker_run_abuild(docker: &Docker, img: &str, repomount: &str) -> anyhow::Result<()> {
 	info!("Creating container for {}", img);
 
 	// create the container
@@ -129,7 +129,7 @@ async fn docker_run_abuild(docker: &Docker, img: &str, repodir: &str) -> anyhow:
 	let mut mounts: Vec<Mount> = Vec::new();
 	mounts.push(Mount {
 		target: Some("/repo".to_string()),
-		source: Some(repodir.to_string()),
+		source: Some(repomount.to_string()),
 		typ: Some(MountTypeEnum::BIND),
 		read_only: Some(false),
 		..Default::default()
@@ -264,7 +264,7 @@ async fn docker_push(docker: &Docker, tag: &str) -> anyhow::Result<()> {
 }
 
 pub(super) async fn build_package(
-	repodir: &str,
+	repomount: &str,
 	docker: &Docker,
 	config: &Config,
 	ver: &Version,
@@ -274,21 +274,30 @@ pub(super) async fn build_package(
 
 	let img = format!("alpine-rust-builder-1.{}", ver.rustminor);
 	docker_build_abuild(docker, &img, config, ver, jobs).await?;
-	docker_run_abuild(docker, &img, repodir).await?;
+	docker_run_abuild(docker, &img, repomount).await?;
 
 	Ok(())
 }
 
-pub(super) async fn build_docker(docker: &Docker, config: &Config, ver: &Version) -> anyhow::Result<()> {
+pub(super) async fn build_and_upload_docker(
+	docker: &Docker,
+	config: &Config,
+	ver: &Version,
+	upload_docker: bool
+) -> anyhow::Result<()> {
 	let img = format!("ghcr.io/msrd0/alpine-rust:1.{}-minimal", ver.rustminor);
 	let dockerfile = config.dockerfile_minimal(ver).render()?;
 	docker_build_dockerfile(docker, &img, &dockerfile, config).await?;
-	docker_push(docker, &img).await?;
+	if upload_docker {
+		docker_push(docker, &img).await?;
+	}
 
 	let img = format!("ghcr.io/msrd0/alpine-rust:1.{}", ver.rustminor);
 	let dockerfile = config.dockerfile_default(ver).render()?;
 	docker_build_dockerfile(docker, &img, &dockerfile, config).await?;
-	docker_push(docker, &img).await?;
+	if upload_docker {
+		docker_push(docker, &img).await?;
+	}
 
 	Ok(())
 }

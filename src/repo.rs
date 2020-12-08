@@ -21,6 +21,7 @@ pub(super) async fn download(dest: &Path) -> anyhow::Result<()> {
 	let keys = list.into_iter().flat_map(|res| res.contents.into_iter().map(|obj| obj.key));
 
 	for key in keys {
+		// TODO check if this key is already downloaded
 		let key_relative = if key.starts_with("/") { &key[1..] } else { &key };
 		let path = dest.join(key_relative);
 		info!("Downloading {} to {}", key, path.display());

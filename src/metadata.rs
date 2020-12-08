@@ -1,4 +1,4 @@
-use super::{repo, Config, CI};
+use super::{repo, Config};
 use askama::Template;
 use std::path::Path;
 use tokio::{
@@ -6,12 +6,12 @@ use tokio::{
 	io::AsyncWriteExt
 };
 
-pub(super) async fn update(config: &Config, repodir: &Path) {
+pub(super) async fn update(config: &Config, repodir: &Path, upload_metadata: bool) {
 	info!("Updating repository metadata");
 
 	let path = repodir.join(&config.pubkey);
 	fs::copy(&config.pubkey, &path).await.expect("Unable to copy pubkey");
-	if *CI {
+	if upload_metadata {
 		repo::upload(&path, &config.pubkey).await.expect("Failed to upload pubkey");
 	}
 
@@ -22,7 +22,7 @@ pub(super) async fn update(config: &Config, repodir: &Path) {
 		.await
 		.expect("Unable to write index.html");
 	drop(index_html);
-	if *CI {
+	if upload_metadata {
 		repo::upload(&path, "index.html").await.expect("Failed to upload index.html");
 	}
 }
