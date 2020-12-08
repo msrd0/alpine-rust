@@ -17,10 +17,10 @@ use tokio::{
 };
 use upcloud::UPCLOUD_CORES;
 
+mod build;
 mod config;
 mod docker;
 mod metadata;
-mod package;
 mod repo;
 mod templates;
 mod upcloud;
@@ -132,7 +132,7 @@ async fn main() {
 	let pkg_updates;
 	if args.versions.is_empty() {
 		pkg_updates = stream::iter(config.versions.iter())
-			.filter(|ver| package::up_to_date(&repodir, &config, ver).map(|up_to_date| !up_to_date))
+			.filter(|ver| build::rust::up_to_date(&repodir, &config, ver).map(|up_to_date| !up_to_date))
 			.collect::<Vec<_>>()
 			.await;
 	} else {
@@ -212,7 +212,7 @@ async fn main() {
 					num_cpus::get() as u16
 				)
 			};
-			if let Err(err) = package::build_package(&repomount, &docker, &config, ver, jobs).await {
+			if let Err(err) = build::rust::build_package(&repomount, &docker, &config, ver, jobs).await {
 				error!("Failed to build package: {}", err);
 				if let Some(server) = server {
 					server.destroy().await.expect("Failed to destroy the server");
@@ -239,7 +239,7 @@ async fn main() {
 		if args.skip_rust_docker {
 			info!("Skipping rust docker images for 1.{}", ver.rustminor);
 		} else {
-			if let Err(err) = package::build_and_upload_docker(&docker, &config, ver, args.upload_docker).await {
+			if let Err(err) = build::rust::build_and_upload_docker(&docker, &config, ver, args.upload_docker).await {
 				error!("Failed to build docker images: {}", err);
 				if let Some(server) = server {
 					server.destroy().await.expect("Failed to destroy the server");

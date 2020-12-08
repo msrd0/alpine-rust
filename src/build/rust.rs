@@ -1,4 +1,4 @@
-use super::{Config, Version, GITHUB_TOKEN};
+use crate::{Config, Version, GITHUB_TOKEN};
 use askama::Template;
 use bollard::{
 	auth::DockerCredentials,
@@ -15,7 +15,7 @@ use tokio::{
 	time::{delay_for, Duration}
 };
 
-pub(super) async fn up_to_date(repodir: &Path, config: &Config, ver: &Version) -> bool {
+pub async fn up_to_date(repodir: &Path, config: &Config, ver: &Version) -> bool {
 	let path = format!(
 		"{alpine}/alpine-rust/x86_64/rust-1.{minor}-1.{minor}.{patch}-r{pkgrel}.apk",
 		alpine = config.alpine,
@@ -93,7 +93,7 @@ async fn docker_build_abuild(docker: &Docker, tag: &str, config: &Config, ver: &
 
 	// create the context tar for docker build
 	let apkbuild: String = ver.apkbuild().render()?;
-	let dockerfile = config.dockerfile_abuild(ver, jobs).render()?;
+	let dockerfile = config.rust_dockerfile_abuild(ver, jobs).render()?;
 	let tar = build_tar(Some(&apkbuild), &dockerfile, &config.pubkey, Some(&config.privkey)).await?;
 
 	// build the docker image
@@ -263,7 +263,7 @@ async fn docker_push(docker: &Docker, tag: &str) -> anyhow::Result<()> {
 	Ok(())
 }
 
-pub(super) async fn build_package(
+pub async fn build_package(
 	repomount: &str,
 	docker: &Docker,
 	config: &Config,
@@ -279,21 +279,21 @@ pub(super) async fn build_package(
 	Ok(())
 }
 
-pub(super) async fn build_and_upload_docker(
+pub async fn build_and_upload_docker(
 	docker: &Docker,
 	config: &Config,
 	ver: &Version,
 	upload_docker: bool
 ) -> anyhow::Result<()> {
 	let img = format!("ghcr.io/msrd0/alpine-rust:1.{}-minimal", ver.rustminor);
-	let dockerfile = config.dockerfile_minimal(ver).render()?;
+	let dockerfile = config.rust_dockerfile_minimal(Some(ver)).render()?;
 	docker_build_dockerfile(docker, &img, &dockerfile, config).await?;
 	if upload_docker {
 		docker_push(docker, &img).await?;
 	}
 
 	let img = format!("ghcr.io/msrd0/alpine-rust:1.{}", ver.rustminor);
-	let dockerfile = config.dockerfile_default(ver).render()?;
+	let dockerfile = config.rust_dockerfile_default(Some(ver)).render()?;
 	docker_build_dockerfile(docker, &img, &dockerfile, config).await?;
 	if upload_docker {
 		docker_push(docker, &img).await?;

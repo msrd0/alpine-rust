@@ -1,5 +1,16 @@
 use crate::config::*;
 use askama::Template;
+use std::fmt::{self, Display};
+
+struct Rustver {
+	rustminor: u32
+}
+
+impl Display for Rustver {
+	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+		write!(f, "1.{}", self.rustminor)
+	}
+}
 
 impl Config {
 	pub fn index_html<'a>(&'a self) -> impl Template + 'a {
@@ -16,9 +27,9 @@ impl Config {
 		}
 	}
 
-	pub fn dockerfile_abuild<'a>(&'a self, ver: &'a Version, jobs: u16) -> impl Template + 'a {
+	pub fn rust_dockerfile_abuild<'a>(&'a self, ver: &'a Version, jobs: u16) -> impl Template + 'a {
 		#[derive(Template)]
-		#[template(path = "abuild.Dockerfile")]
+		#[template(path = "rust/abuild.Dockerfile")]
 		struct DockerfileAbuild<'t> {
 			alpine: &'t str,
 			pubkey: &'t str,
@@ -36,35 +47,39 @@ impl Config {
 		}
 	}
 
-	pub fn dockerfile_default<'a>(&'a self, ver: &'a Version) -> impl Template + 'a {
+	pub fn rust_dockerfile_default<'a>(&'a self, ver: Option<&'a Version>) -> impl Template + 'a {
 		#[derive(Template)]
-		#[template(path = "default.Dockerfile")]
+		#[template(path = "rust/default.Dockerfile")]
 		struct DockerfileDefault<'t> {
 			alpine: &'t str,
 			pubkey: &'t str,
-			rustver: String
+			rustver: Option<Rustver>
 		}
 
 		DockerfileDefault {
 			alpine: &self.alpine,
 			pubkey: &self.pubkey,
-			rustver: format!("1.{}", ver.rustminor)
+			rustver: ver.map(|ver| Rustver {
+				rustminor: ver.rustminor
+			})
 		}
 	}
 
-	pub fn dockerfile_minimal<'a>(&'a self, ver: &'a Version) -> impl Template + 'a {
+	pub fn rust_dockerfile_minimal<'a>(&'a self, ver: Option<&'a Version>) -> impl Template + 'a {
 		#[derive(Template)]
-		#[template(path = "minimal.Dockerfile")]
+		#[template(path = "rust/minimal.Dockerfile")]
 		struct DockerfileMinimal<'t> {
 			alpine: &'t str,
 			pubkey: &'t str,
-			rustver: String
+			rustver: Option<Rustver>
 		}
 
 		DockerfileMinimal {
 			alpine: &self.alpine,
 			pubkey: &self.pubkey,
-			rustver: format!("1.{}", ver.rustminor)
+			rustver: ver.map(|ver| Rustver {
+				rustminor: ver.rustminor
+			})
 		}
 	}
 }
@@ -72,7 +87,7 @@ impl Config {
 impl Version {
 	pub fn apkbuild<'a>(&'a self) -> impl Template + 'a {
 		#[derive(Template)]
-		#[template(path = "APKBUILD")]
+		#[template(path = "rust/APKBUILD")]
 		struct ApkbuildTemplate<'t> {
 			rustminor: u32,
 			rustpatch: u32,
