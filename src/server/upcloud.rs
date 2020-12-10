@@ -1,8 +1,12 @@
-use super::docker_keys::{gen_keys, DockerKeys};
+use super::{
+	docker_keys::{gen_keys, DockerKeys},
+	IPv6CIDR
+};
 use crate::{repo, Config};
 use futures_util::StreamExt;
 use rand::{distributions::Alphanumeric, thread_rng, Rng};
 use serde::{Deserialize, Serialize};
+use serde_json::json;
 use ssh2::Session;
 use std::{
 	collections::HashMap,
@@ -24,6 +28,10 @@ pub const UPCLOUD_CORES: u16 = 8;
 pub const UPCLOUD_MEMORY: u16 = 8 * 1024;
 // the OS comes in at about 3G and compiling rust doesn't take much so 15G should be plenty
 pub const UPCLOUD_STORAGE: u16 = 15;
+
+// the IPv6 CIDR that will be used by the docker server
+#[allow(non_upper_case_globals)] // IPv6 is correct
+pub const UPCLOUD_IPv6CIDR: IPv6CIDR<&str> = IPv6CIDR::new("fd00:dead:beef::", 48);
 
 lazy_static! {
 	static ref CLIENT: reqwest::Client = reqwest::Client::new();
@@ -484,7 +492,11 @@ pub async fn install_server(config: &Config, server: &ServerResponse, repodir: &
 		&mut sess,
 		"curl -fsSL https://download.docker.com/linux/debian/gpg | apt-key add -"
 	)?;
-	run(&mut sess, "echo 'deb [arch=amd64] https://download.docker.com/linux/debian buster stable' >/etc/apt/sources.list.d/docker.list")?;
+	send(
+		&mut sess,
+		"/etc/apt/sources.list.d/docker.list",
+		b"deb [arch=amd64] https://download.docker.com/linux/debian buster stable"
+	)?;
 	run(&mut sess, "apt-get update -y")?;
 	run(&mut sess, "apt-get install -y --no-install-recommends docker-ce")?;
 	run(&mut sess, "systemctl disable --now docker")?;
@@ -495,6 +507,12 @@ pub async fn install_server(config: &Config, server: &ServerResponse, repodir: &
 	send(&mut sess, "/etc/docker-certs/ca.pem", &keys.ca_pem)?;
 	send(&mut sess, "/etc/docker-certs/cert.pem", &keys.server_cert_pem)?;
 	send(&mut sess, "/etc/docker-certs/key.pem", &keys.server_key_pem)?;
+
+	// make sure that our docker is IPv6-enabled
+	// we will use this when testing to communicate with the host over IPv6, so we can skip
+	// iptables rules, meaning no NAT-ing for now
+	let json = json!({ "ipv6": true, "fixed-cidr-v6": UPCLOUD_IPv6CIDR });
+	send(&mut sess, "/etc/docker/daemon.json", &serde_json::to_vec(&json)?)?;
 
 	// install the new docker systemd unit
 	send(

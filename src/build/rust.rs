@@ -1,4 +1,4 @@
-use crate::{docker::tar_header, Config, Version, GITHUB_TOKEN};
+use crate::{docker::tar_header, server::IPv6CIDR, Config, Version, GITHUB_TOKEN};
 use askama::Template;
 use bollard::{
 	auth::DockerCredentials,
@@ -264,6 +264,22 @@ pub async fn build_package(
 	let img = format!("alpine-rust-builder-1.{}", ver.rustminor);
 	docker_build_abuild(docker, &img, config, ver, jobs).await?;
 	docker_run_abuild(docker, &img, repomount).await?;
+
+	Ok(())
+}
+
+pub async fn test_package(
+	docker: &Docker,
+	cidr_v6: &IPv6CIDR<String>,
+	config: &Config,
+	ver: &Version
+) -> anyhow::Result<()> {
+	let tag = format!("alpine-rust-test-1.{}", ver.rustminor);
+
+	let dockerfile = config.rust_dockerfile_test(cidr_v6).render()?;
+	docker_build_dockerfile(docker, &tag, &dockerfile, config).await?;
+
+	unimplemented!();
 
 	Ok(())
 }

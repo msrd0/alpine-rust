@@ -1,4 +1,4 @@
-use crate::config::*;
+use crate::{config::*, server::IPv6CIDR};
 use askama::Template;
 use std::fmt::{self, Display};
 
@@ -98,6 +98,22 @@ impl Config {
 			rustver: ver.map(|ver| Rustver {
 				rustminor: ver.rustminor
 			})
+		}
+	}
+
+	pub fn rust_dockerfile_test<'a, P: Display>(&'a self, cidr_v6: &'a IPv6CIDR<P>) -> impl Template + 'a {
+		#[derive(Template)]
+		#[template(path = "rust/test.Dockerfile")]
+		struct DockerfileMinimal<'t, P: Display> {
+			alpine: &'t str,
+			pubkey: &'t str,
+			cidr_v6: &'t IPv6CIDR<P>
+		}
+
+		DockerfileMinimal {
+			alpine: &self.alpine,
+			pubkey: &self.pubkey,
+			cidr_v6
 		}
 	}
 }

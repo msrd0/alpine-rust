@@ -6,9 +6,11 @@ extern crate log;
 use bollard::{Docker, API_DEFAULT_VERSION};
 use env::current_dir;
 use futures_util::{stream, FutureExt, StreamExt};
-
 use log::LevelFilter;
-use server::upcloud::UPCLOUD_CORES;
+use server::{
+	upcloud::{UPCLOUD_IPv6CIDR, UPCLOUD_CORES},
+	IPv6CIDR
+};
 use std::{borrow::Cow, env, path::PathBuf, process::exit};
 use structopt::StructOpt;
 use tempfile::tempdir;
@@ -202,16 +204,22 @@ async fn main() {
 	};
 
 	// determine the docker environment
-	let (repomount, jobs) = match &server {
-		Some(_) => (Cow::Borrowed("/var/lib/alpine-rust"), UPCLOUD_CORES),
+	let (repomount, jobs, cidr_v6) = match &server {
+		Some(_) => (
+			Cow::Borrowed("/var/lib/alpine-rust"),
+			UPCLOUD_CORES,
+			UPCLOUD_IPv6CIDR.to_owned()
+		),
 		None => (
 			current_dir().unwrap().join("repo").to_string_lossy().to_string().into(),
-			num_cpus::get() as u16
+			num_cpus::get() as u16,
+			docker::local_ipv6_cidr()
+				.expect("Failed to parse /etc/docker/daemon.json - Is your docker daemon IPv6-enabled?")
 		)
 	};
 
 	// start our local caddy server
-	if let Err(err) = docker::build_caddy(&docker, &config, &repomount).await {
+	if let Err(err) = docker::build_caddy(&docker, &config).await {
 		error!("Unable to build caddy image: {}", err);
 		exit(1);
 	}
@@ -236,19 +244,29 @@ async fn main() {
 				}
 				exit(1);
 			}
+		}
 
-			// upload the changes
-			if args.upload_packages {
-				if let Some(mut server) = server.as_mut() {
-					if let Err(err) = server::upcloud::commit_changes(&config, &repodir, &mut server).await {
-						error!("Failed to commit changes: {}", err);
-						server.destroy().await.expect("Failed to destroy the server");
-						exit(1);
-					}
-				} else {
-					error!("Uploading packages without upcloud is not supported");
+		// test the package
+		if let Err(err) = build::rust::test_package(&docker, &cidr_v6, &config, ver).await {
+			error!("Testing package failed: {}", err);
+			// TODO maybe upload the package somewhere for manual inspection
+			if let Some(server) = server {
+				server.destroy().await.expect("Failed to destroy the server");
+			}
+			exit(1);
+		}
+
+		// upload the changes
+		if !args.skip_rust_packages && args.upload_packages {
+			if let Some(mut server) = server.as_mut() {
+				if let Err(err) = server::upcloud::commit_changes(&config, &repodir, &mut server).await {
+					error!("Failed to commit changes: {}", err);
+					server.destroy().await.expect("Failed to destroy the server");
 					exit(1);
 				}
+			} else {
+				error!("Uploading packages without upcloud is not supported");
+				exit(1);
 			}
 		}
 

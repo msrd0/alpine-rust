@@ -1,4 +1,4 @@
-use crate::Config;
+use crate::{server::IPv6CIDR, Config};
 use anyhow::Context;
 use askama::Template;
 use bollard::{
@@ -9,9 +9,22 @@ use bollard::{
 	Docker
 };
 use futures_util::StreamExt;
+use serde::Deserialize;
 use std::{collections::HashMap, io::Cursor};
 
-const CADDY_IMG: &str = "alpine-rust-caddy";
+pub fn local_ipv6_cidr() -> anyhow::Result<IPv6CIDR<String>> {
+	#[derive(Deserialize)]
+	struct DockerConfig {
+		#[serde(rename = "fixed-cidr-v6")]
+		cidr_v6: IPv6CIDR<String>
+	}
+
+	// TODO this should probably be async but serde doesn't support that
+	let file = std::fs::File::open("/etc/docker/daemon.json").context("Failed to open /etc/docker/daemon.json")?;
+	let config: DockerConfig = serde_json::from_reader(file).context("Failed to parse /etc/docker/daemon.json")?;
+
+	Ok(config.cidr_v6)
+}
 
 pub fn tar_header(path: &str, len: usize) -> tar::Header {
 	let mut header = tar::Header::new_old();
@@ -44,7 +57,9 @@ async fn build_tar(caddyfile: &str, dockerfile: &str) -> anyhow::Result<Vec<u8>>
 	Ok(tar_buf)
 }
 
-pub async fn build_caddy(docker: &Docker, config: &Config, repomount: &str) -> anyhow::Result<()> {
+const CADDY_IMG: &str = "alpine-rust-caddy";
+
+pub async fn build_caddy(docker: &Docker, config: &Config) -> anyhow::Result<()> {
 	info!("Building Docker image {}", CADDY_IMG);
 
 	// create the context tar for docker build
@@ -114,8 +129,10 @@ pub async fn start_caddy(docker: &Docker, repomount: &str) -> anyhow::Result<Cad
 			attach_stderr: Some(false),
 			image: Some(CADDY_IMG),
 			volumes: Some(volumes),
+			exposed_ports: Some(ports),
 			host_config: Some(HostConfig {
 				mounts: Some(mounts),
+				port_bindings: Some(port_bindings),
 				..Default::default()
 			}),
 			..Default::default()
