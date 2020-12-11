@@ -1,8 +1,7 @@
-use super::{
-	docker_keys::{gen_keys, DockerKeys},
-	IPv6CIDR
+use crate::{
+	docker::{gen_docker_keys, DockerKeys, IPv6CIDR},
+	repo, Config
 };
-use crate::{repo, Config};
 use futures_util::StreamExt;
 use rand::{distributions::Alphanumeric, thread_rng, Rng};
 use serde::{Deserialize, Serialize};
@@ -502,7 +501,7 @@ pub async fn install_server(config: &Config, server: &ServerResponse, repodir: &
 	run(&mut sess, "systemctl disable --now docker")?;
 
 	// upload the certificates
-	let keys = gen_keys(ip, &domain).await?;
+	let keys = gen_docker_keys(ip, &domain).await?;
 	run(&mut sess, "mkdir -p /etc/docker-certs")?;
 	send(&mut sess, "/etc/docker-certs/ca.pem", &keys.ca_pem)?;
 	send(&mut sess, "/etc/docker-certs/cert.pem", &keys.server_cert_pem)?;

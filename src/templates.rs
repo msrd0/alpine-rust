@@ -1,4 +1,4 @@
-use crate::{config::*, server::IPv6CIDR};
+use crate::{config::*, docker::IPv6CIDR};
 use askama::Template;
 use std::fmt::{self, Display};
 

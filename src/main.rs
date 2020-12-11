@@ -9,10 +9,7 @@ use bollard::{Docker, API_DEFAULT_VERSION};
 use env::current_dir;
 use futures_util::{stream, FutureExt, StreamExt};
 use log::LevelFilter;
-use server::{
-	upcloud::{UPCLOUD_IPv6CIDR, UPCLOUD_CORES},
-	IPv6CIDR
-};
+use server::upcloud::{UPCLOUD_IPv6CIDR, UPCLOUD_CORES};
 use std::{borrow::Cow, env, path::PathBuf, process::exit};
 use structopt::StructOpt;
 use tempfile::tempdir;

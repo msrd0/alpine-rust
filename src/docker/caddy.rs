@@ -1,4 +1,5 @@
-use crate::{server::IPv6CIDR, Config};
+use super::build_tar;
+use crate::Config;
 use anyhow::Context;
 use askama::Template;
 use bollard::{
@@ -9,53 +10,7 @@ use bollard::{
 	Docker
 };
 use futures_util::StreamExt;
-use serde::Deserialize;
-use std::{collections::HashMap, io::Cursor};
-
-pub fn local_ipv6_cidr() -> anyhow::Result<IPv6CIDR<String>> {
-	#[derive(Deserialize)]
-	struct DockerConfig {
-		#[serde(rename = "fixed-cidr-v6")]
-		cidr_v6: IPv6CIDR<String>
-	}
-
-	// TODO this should probably be async but serde doesn't support that
-	let file = std::fs::File::open("/etc/docker/daemon.json").context("Failed to open /etc/docker/daemon.json")?;
-	let config: DockerConfig = serde_json::from_reader(file).context("Failed to parse /etc/docker/daemon.json")?;
-
-	Ok(config.cidr_v6)
-}
-
-pub fn tar_header(path: &str, len: usize) -> tar::Header {
-	let mut header = tar::Header::new_old();
-	header.set_path(path).unwrap();
-	header.set_mode(0o644);
-	header.set_uid(0);
-	header.set_gid(0);
-	header.set_size(len as u64);
-	header.set_cksum();
-	header
-}
-
-async fn build_tar(caddyfile: &str, dockerfile: &str) -> anyhow::Result<Vec<u8>> {
-	let mut tar_buf: Vec<u8> = Vec::new();
-	let mut tar = tar::Builder::new(&mut tar_buf);
-
-	// write the Caddyfile file
-	let bytes = caddyfile.as_bytes();
-	let header = tar_header("Caddyfile", bytes.len());
-	tar.append(&header, Cursor::new(bytes))?;
-
-	// write the Dockerfile file
-	let bytes = dockerfile.as_bytes();
-	let header = tar_header("Dockerfile", bytes.len());
-	tar.append(&header, Cursor::new(bytes))?;
-
-	// finish the tar archive
-	tar.finish()?;
-	drop(tar);
-	Ok(tar_buf)
-}
+use std::collections::HashMap;
 
 const CADDY_IMG: &str = "alpine-rust-caddy";
 

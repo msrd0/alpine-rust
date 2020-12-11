@@ -1,4 +1,7 @@
-use crate::{docker::tar_header, server::IPv6CIDR, Config, Version, GITHUB_TOKEN};
+use crate::{
+	docker::{tar_header, IPv6CIDR},
+	Config, Version, GITHUB_TOKEN
+};
 use anyhow::Context;
 use askama::Template;
 use bollard::{

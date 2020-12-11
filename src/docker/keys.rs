@@ -63,7 +63,7 @@ impl DockerKeys {
 	}
 }
 
-pub async fn gen_keys(_ip: &str, domain: &str) -> anyhow::Result<DockerKeys> {
+pub async fn gen_docker_keys(_ip: &str, domain: &str) -> anyhow::Result<DockerKeys> {
 	info!("Generating Docker Keys");
 
 	let secp384r1 = EcGroup::from_curve_name(Nid::SECP384R1)?;
