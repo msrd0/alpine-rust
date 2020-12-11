@@ -1,4 +1,5 @@
 use crate::{docker::tar_header, server::IPv6CIDR, Config, Version, GITHUB_TOKEN};
+use anyhow::Context;
 use askama::Template;
 use bollard::{
 	auth::DockerCredentials,
@@ -109,42 +110,14 @@ async fn docker_build_abuild(docker: &Docker, tag: &str, config: &Config, ver: &
 	Ok(())
 }
 
-async fn docker_run_abuild(docker: &Docker, img: &str, repomount: &str) -> anyhow::Result<()> {
-	info!("Creating container for {}", img);
-
-	// create the container
-	let mut volumes: HashMap<String, HashMap<(), ()>> = HashMap::new();
-	volumes.insert("/repo".to_owned(), Default::default());
-	let mut mounts: Vec<Mount> = Vec::new();
-	mounts.push(Mount {
-		target: Some("/repo".to_string()),
-		source: Some(repomount.to_string()),
-		typ: Some(MountTypeEnum::BIND),
-		read_only: Some(false),
-		..Default::default()
-	});
-	let container = docker
-		.create_container::<String, String>(None, container::Config {
-			attach_stdout: Some(true),
-			attach_stderr: Some(true),
-			image: Some(img.to_owned()),
-			volumes: Some(volumes),
-			host_config: Some(HostConfig {
-				mounts: Some(mounts),
-				..Default::default()
-			}),
-			..Default::default()
-		})
-		.await?;
-	info!("Created container {}", container.id);
-
+async fn run_container_to_completion(docker: &Docker, container_id: &str) -> anyhow::Result<()> {
 	// start the container
-	docker.start_container::<String>(&container.id, None).await?;
-	info!("Started container {}", container.id);
+	docker.start_container::<String>(container_id, None).await?;
+	info!("Started container {}", container_id);
 
 	// attach to the container logs
 	let mut logs = docker.logs::<String>(
-		&container.id,
+		container_id,
 		Some(LogsOptions {
 			follow: true,
 			stdout: true,
@@ -162,35 +135,85 @@ async fn docker_run_abuild(docker: &Docker, img: &str, repomount: &str) -> anyho
 	// ensure that the container has stopped
 	loop {
 		delay_for(Duration::new(2, 0)).await;
-		let state = docker.inspect_container(&container.id, None).await?.state;
+		let state = docker.inspect_container(container_id, None).await?.state;
 		let state = match state {
 			Some(state) => state,
 			None => {
-				warn!("Container {} has unknown state", container.id);
+				warn!("Container {} has unknown state", container_id);
 				continue;
 			}
 		};
 		if state.running == Some(true) {
-			info!("Container {} is still running", container.id);
+			info!("Container {} is still running", container_id);
 			continue;
 		}
 		let exit_code = match state.exit_code {
 			Some(exit_code) => exit_code,
 			None => {
-				warn!("Unable to get exit code for container {}, assuming 0", container.id);
+				warn!("Unable to get exit code for container {}, assuming 0", container_id);
 				break;
 			}
 		};
 		if exit_code != 0 {
 			return Err(anyhow::Error::msg(format!(
 				"Container {} finished with exit code {}",
-				container.id, exit_code
+				container_id, exit_code
 			)));
 		}
 		break;
 	}
-	info!("Container {} has stopped", container.id);
+	info!("Container {} has stopped", container_id);
 	Ok(())
+}
+
+async fn docker_run_abuild(docker: &Docker, img: &str, repomount: &str) -> anyhow::Result<()> {
+	info!("Creating container for {}", img);
+
+	// create the container
+	let mut volumes: HashMap<&str, HashMap<(), ()>> = HashMap::new();
+	volumes.insert("/repo", Default::default());
+	let mut mounts: Vec<Mount> = Vec::new();
+	mounts.push(Mount {
+		target: Some("/repo".to_string()),
+		source: Some(repomount.to_string()),
+		typ: Some(MountTypeEnum::BIND),
+		read_only: Some(false),
+		..Default::default()
+	});
+	let container = docker
+		.create_container::<String, &str>(None, container::Config {
+			attach_stdout: Some(true),
+			attach_stderr: Some(true),
+			image: Some(img),
+			volumes: Some(volumes),
+			host_config: Some(HostConfig {
+				mounts: Some(mounts),
+				..Default::default()
+			}),
+			..Default::default()
+		})
+		.await?;
+	info!("Created container {}", container.id);
+
+	run_container_to_completion(docker, &container.id).await
+}
+
+async fn docker_run_test(docker: &Docker, img: &str, cmd: &str) -> anyhow::Result<()> {
+	info!("Creating container for {}", img);
+
+	// create the container
+	let container = docker
+		.create_container::<String, &str>(None, container::Config {
+			cmd: Some(vec!["/bin/ash", "-exo", "pipefail", "-c", cmd]),
+			attach_stdout: Some(true),
+			attach_stderr: Some(true),
+			image: Some(img),
+			..Default::default()
+		})
+		.await?;
+	info!("Created container {}", container.id);
+
+	run_container_to_completion(docker, &container.id).await
 }
 
 async fn docker_build_dockerfile(docker: &Docker, tag: &str, dockerfile: &str, config: &Config) -> anyhow::Result<()> {
@@ -279,7 +302,91 @@ pub async fn test_package(
 	let dockerfile = config.rust_dockerfile_test(cidr_v6).render()?;
 	docker_build_dockerfile(docker, &tag, &dockerfile, config).await?;
 
-	unimplemented!();
+	// TODO is this the best way to get all packages?
+	let packages = [
+		"cargo-{}",
+		"cargo-{}-bash-completions",
+		"cargo-{}-doc",
+		"cargo-{}-zsh-completion",
+		"clippy-{}",
+		"rust-{}",
+		"rust-{}-analysis",
+		"rust-{}-dbg",
+		"rust-{}-doc",
+		"rust-{}-gdb",
+		"rust-{}-lldb",
+		"rust-{}-src",
+		"rust-{}-stdlib",
+		"rustfmt-{}"
+	]
+	.iter()
+	.map(|tpl| tpl.replace("{}", &format!("1.{}", ver.rustminor)))
+	.collect::<Vec<_>>();
+
+	// first of all, let's test that every package can be installed on its own
+	for pkg in &packages {
+		info!("Testing installation of {}", pkg);
+		let cmd = format!("apk add {}", pkg);
+		docker_run_test(docker, &tag, &cmd)
+			.await
+			.context(format!("Failed to install {}", pkg))?;
+	}
+
+	// next, let's test they can all be installed alongside each other
+	info!("Testing installation of all packages for 1.{}", ver.rustminor);
+	let cmd = format!("apk add {}", packages.join(" "));
+	docker_run_test(docker, &tag, &cmd)
+		.await
+		.context(format!("Failed to install all packages for 1.{}", ver.rustminor))?;
+
+	// and finally, test a small rust program that uses derive macros
+	info!("Testing a small rust program");
+	let cargo = indoc!(
+		r#"
+		[package]
+		name = "alpine-rust-test"
+		version = "0.0.0"
+		authors = ["Tux", "The Rust Crab"]
+		edition = "2018"
+		publish = false
+		
+		[dependencies]
+		serde = { version = "1.0", features = ["derive"] }
+		serde_json = "1.0"
+	"#
+	);
+	let main = indoc!(
+		r#"
+		use serde::Serialize;
+		use serde_json::{json, to_value};
+		
+		#[derive(Serialize)]
+		struct Foo {
+			foo: u8
+		}
+		
+		fn main() {
+			let expected = json!({ "foo": 42 });
+			let actual = to_value(&Foo { foo: 42 }).unwrap();
+			assert_eq!(actual, expected);
+		}
+	"#
+	);
+	let cmd = vec![
+		format!(
+			"apk add cargo-1.{rustminor} clang lld rust-1.{rustminor}",
+			rustminor = ver.rustminor
+		),
+		"mkdir -p /tmp/alpine-rust-test/src".to_owned(),
+		"cd /tmp/alpine-rust-test".to_owned(),
+		format!("echo {} | base64 -d >Cargo.toml", base64::encode(cargo)),
+		format!("echo {} | base64 -d >src/main.rs", base64::encode(main)),
+		"RUSTFLAGS=\"-C linker=clang -C link-arg=-fuse-ld=lld\" cargo run".to_owned(),
+	]
+	.join(" && ");
+	docker_run_test(docker, &tag, &cmd)
+		.await
+		.context("Failed to run simple rust program")?;
 
 	Ok(())
 }
