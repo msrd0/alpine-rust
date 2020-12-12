@@ -1,12 +1,12 @@
 use crate::{
-	docker::{tar_header, IPv6CIDR},
+	docker::{build_image, run_container_to_completion, tar_header, IPv6CIDR},
 	Config, Version, GITHUB_TOKEN
 };
 use anyhow::Context;
 use askama::Template;
 use bollard::{
 	auth::DockerCredentials,
-	container::{self, LogsOptions},
+	container,
 	image::BuildImageOptions,
 	models::{HostConfig, Mount, MountTypeEnum},
 	Docker
@@ -15,8 +15,7 @@ use futures_util::StreamExt;
 use std::{collections::HashMap, io::Cursor, path::Path, process::exit};
 use tokio::{
 	fs::{self, File},
-	io::{self, AsyncReadExt},
-	time::{delay_for, Duration}
+	io::{self, AsyncReadExt}
 };
 
 pub async fn up_to_date(repodir: &Path, config: &Config, ver: &Version) -> bool {
@@ -90,82 +89,17 @@ async fn docker_build_abuild(docker: &Docker, tag: &str, config: &Config, ver: &
 	let tar = build_tar(Some(&apkbuild), &dockerfile, &config.pubkey, Some(&config.privkey)).await?;
 
 	// build the docker image
-	let mut img_stream = docker.build_image(
+	build_image(
+		docker,
 		BuildImageOptions {
 			t: tag.to_owned(),
 			pull: true,
 			..Default::default()
 		},
-		None,
-		Some(tar.into())
-	);
-	while let Some(status) = img_stream.next().await {
-		let status = status.expect("Failed to build image");
-		if let Some(log) = status.stream {
-			print!("{}", log);
-		}
-		if let Some(err) = status.error {
-			print!("{}", err);
-			return Err(anyhow::Error::msg(format!("Failed to build docker image {}", tag)));
-		}
-	}
+		tar
+	)
+	.await?;
 	info!("Built Docker image {}", tag);
-	Ok(())
-}
-
-async fn run_container_to_completion(docker: &Docker, container_id: &str) -> anyhow::Result<()> {
-	// start the container
-	docker.start_container::<String>(container_id, None).await?;
-	info!("Started container {}", container_id);
-
-	// attach to the container logs
-	let mut logs = docker.logs::<String>(
-		container_id,
-		Some(LogsOptions {
-			follow: true,
-			stdout: true,
-			stderr: true,
-			timestamps: true,
-			..Default::default()
-		})
-	);
-	while let Some(log) = logs.next().await {
-		let log = log?;
-		print!("{}", log);
-	}
-	info!("Log stream finished");
-
-	// ensure that the container has stopped
-	loop {
-		delay_for(Duration::new(2, 0)).await;
-		let state = docker.inspect_container(container_id, None).await?.state;
-		let state = match state {
-			Some(state) => state,
-			None => {
-				warn!("Container {} has unknown state", container_id);
-				continue;
-			}
-		};
-		if state.running == Some(true) {
-			info!("Container {} is still running", container_id);
-			continue;
-		}
-		let exit_code = match state.exit_code {
-			Some(exit_code) => exit_code,
-			None => {
-				warn!("Unable to get exit code for container {}, assuming 0", container_id);
-				break;
-			}
-		};
-		if exit_code != 0 {
-			return Err(anyhow::Error::msg(format!(
-				"Container {} finished with exit code {}",
-				container_id, exit_code
-			)));
-		}
-		break;
-	}
-	info!("Container {} has stopped", container_id);
 	Ok(())
 }
 
@@ -226,26 +160,17 @@ async fn docker_build_dockerfile(docker: &Docker, tag: &str, dockerfile: &str, c
 	let tar = build_tar(None, dockerfile, &config.pubkey, None).await?;
 
 	// build the docker image
-	let mut img_stream = docker.build_image(
+	build_image(
+		docker,
 		BuildImageOptions {
 			t: tag,
 			pull: true,
 			nocache: true,
 			..Default::default()
 		},
-		None,
-		Some(tar.into())
-	);
-	while let Some(status) = img_stream.next().await {
-		let status = status?;
-		if let Some(log) = status.stream {
-			print!("{}", log);
-		}
-		if let Some(err) = status.error {
-			print!("{}", err);
-			return Err(anyhow::Error::msg(format!("Failed to build docker image {}", tag)));
-		}
-	}
+		tar
+	)
+	.await?;
 	info!("Built Docker image {}", tag);
 	Ok(())
 }

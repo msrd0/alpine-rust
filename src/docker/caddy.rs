@@ -1,4 +1,4 @@
-use super::build_tar;
+use super::{build_image, tar_header};
 use crate::Config;
 use anyhow::Context;
 use askama::Template;
@@ -9,10 +9,29 @@ use bollard::{
 	models::{HostConfig, Mount, MountTypeEnum, PortBinding},
 	Docker
 };
-use futures_util::StreamExt;
-use std::collections::HashMap;
+use std::{collections::HashMap, io::Cursor};
 
 const CADDY_IMG: &str = "alpine-rust-caddy";
+
+async fn build_tar(caddyfile: &str, dockerfile: &str) -> anyhow::Result<Vec<u8>> {
+	let mut tar_buf: Vec<u8> = Vec::new();
+	let mut tar = tar::Builder::new(&mut tar_buf);
+
+	// write the Caddyfile file
+	let bytes = caddyfile.as_bytes();
+	let header = tar_header("Caddyfile", bytes.len());
+	tar.append(&header, Cursor::new(bytes))?;
+
+	// write the Dockerfile file
+	let bytes = dockerfile.as_bytes();
+	let header = tar_header("Dockerfile", bytes.len());
+	tar.append(&header, Cursor::new(bytes))?;
+
+	// finish the tar archive
+	tar.finish()?;
+	drop(tar);
+	Ok(tar_buf)
+}
 
 pub async fn build_caddy(docker: &Docker, config: &Config) -> anyhow::Result<()> {
 	info!("Building Docker image {}", CADDY_IMG);
@@ -23,26 +42,18 @@ pub async fn build_caddy(docker: &Docker, config: &Config) -> anyhow::Result<()>
 	let tar = build_tar(&caddyfile, &dockerfile).await?;
 
 	// build the docker image
-	let mut img_stream = docker.build_image(
+	build_image(
+		docker,
 		BuildImageOptions {
 			t: CADDY_IMG,
 			pull: true,
 			..Default::default()
 		},
-		None,
-		Some(tar.into())
-	);
-	while let Some(status) = img_stream.next().await {
-		let status = status.expect("Failed to build image");
-		if let Some(log) = status.stream {
-			print!("{}", log);
-		}
-		if let Some(err) = status.error {
-			print!("{}", err);
-			return Err(anyhow::Error::msg(format!("Failed to build docker image {}", CADDY_IMG)));
-		}
-	}
+		tar
+	)
+	.await?;
 	info!("Built Docker image {}", CADDY_IMG);
+
 	Ok(())
 }
 

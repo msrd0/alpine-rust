@@ -1,4 +1,9 @@
-use std::io::Cursor;
+use anyhow::bail;
+use bollard::{container::LogsOptions, image::BuildImageOptions, Docker};
+use futures_util::StreamExt;
+use serde::Serialize;
+use std::{hash::Hash, time::Duration};
+use tokio::time::delay_for;
 
 mod caddy;
 pub use caddy::*;
@@ -18,22 +23,77 @@ pub fn tar_header(path: &str, len: usize) -> tar::Header {
 	header
 }
 
-async fn build_tar(caddyfile: &str, dockerfile: &str) -> anyhow::Result<Vec<u8>> {
-	let mut tar_buf: Vec<u8> = Vec::new();
-	let mut tar = tar::Builder::new(&mut tar_buf);
+pub async fn build_image<T>(docker: &Docker, options: BuildImageOptions<T>, tar: Vec<u8>) -> anyhow::Result<()>
+where
+	T: Eq + Hash + Into<String> + Serialize
+{
+	let mut img_stream = docker.build_image(options, None, Some(tar.into()));
+	while let Some(status) = img_stream.next().await {
+		let status = status.expect("Failed to build image");
+		if let Some(log) = status.stream {
+			print!("{}", log);
+		}
+		if let Some(err) = status.error {
+			print!("{}", err);
+			bail!("Failed to build docker image");
+		}
+	}
 
-	// write the Caddyfile file
-	let bytes = caddyfile.as_bytes();
-	let header = tar_header("Caddyfile", bytes.len());
-	tar.append(&header, Cursor::new(bytes))?;
+	Ok(())
+}
 
-	// write the Dockerfile file
-	let bytes = dockerfile.as_bytes();
-	let header = tar_header("Dockerfile", bytes.len());
-	tar.append(&header, Cursor::new(bytes))?;
+pub async fn run_container_to_completion(docker: &Docker, container_id: &str) -> anyhow::Result<()> {
+	// start the container
+	docker.start_container::<String>(container_id, None).await?;
+	info!("Started container {}", container_id);
 
-	// finish the tar archive
-	tar.finish()?;
-	drop(tar);
-	Ok(tar_buf)
+	// attach to the container logs
+	let mut logs = docker.logs::<String>(
+		container_id,
+		Some(LogsOptions {
+			follow: true,
+			stdout: true,
+			stderr: true,
+			timestamps: true,
+			..Default::default()
+		})
+	);
+	while let Some(log) = logs.next().await {
+		let log = log?;
+		print!("{}", log);
+	}
+	info!("Log stream finished");
+
+	// ensure that the container has stopped
+	loop {
+		delay_for(Duration::new(2, 0)).await;
+		let state = docker.inspect_container(container_id, None).await?.state;
+		let state = match state {
+			Some(state) => state,
+			None => {
+				warn!("Container {} has unknown state", container_id);
+				continue;
+			}
+		};
+		if state.running == Some(true) {
+			info!("Container {} is still running", container_id);
+			continue;
+		}
+		let exit_code = match state.exit_code {
+			Some(exit_code) => exit_code,
+			None => {
+				warn!("Unable to get exit code for container {}, assuming 0", container_id);
+				break;
+			}
+		};
+		if exit_code != 0 {
+			return Err(anyhow::Error::msg(format!(
+				"Container {} finished with exit code {}",
+				container_id, exit_code
+			)));
+		}
+		break;
+	}
+	info!("Container {} has stopped", container_id);
+	Ok(())
 }
