@@ -37,6 +37,19 @@ b5fba98a3e1b50ab91ad093cec4347ba85f46aa7e7a0da18d39f794e43eebb56699292832051f0ef
 fffb26550d5375fd4029c61ce945c0bd9ab4b6909a6fef96a1d424d7f562149780d712c55ca7c19eda37926eafcc72f0e581d8a1002e69f2f153180119160378  1.41.tar.gz
 """
 
+# 1.42.0 - built using 1.41.1 from this repo
+[[versions]]
+rustminor = 42
+rustpatch = 0
+pkgrel = 1
+llvmver = 10
+bootver = "1.41"
+bootsys = false
+sha512sums = """
+00359778ba886393e9792763ebd2754ee0b0db535a246ce9dcbbedd63b6eb414e321b552c88d4347ca355b8066492ef657aa3ceca2bcf00dfd80e1a92fac24b0  rustc-1.42.0-src.tar.gz
+3ded0dbf385be03eb63a9bf8e7534c690024b116459b5b1c561a3a4746e6157d39305eb6323c47d3b63fbdc6eb73ac279ca255745cdeb15e3179485394c5712f  1.42.tar.gz
+"""
+
 # 1.43.1
 # [[versions]]
 # rustminor = 43
