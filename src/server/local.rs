@@ -47,8 +47,10 @@ impl Server for LocalServer {
 		let dir = repodir.join(format!("{}/alpine-rust/x86_64", config.alpine));
 
 		let mut res: anyhow::Result<()> = Ok(());
-		while let Some(file) = fs::read_dir(&dir).await?.next().await {
+		let mut entries = fs::read_dir(&dir).await?;
+		while let Some(file) = entries.next().await {
 			let path = file?.path();
+			info!("Inspecting {}", path.display());
 			let parent = path.parent().ok_or(anyhow!("{} does not have a parent", path.display()))?;
 			let file_name = path
 				.file_name()
@@ -65,7 +67,7 @@ impl Server for LocalServer {
 				if len == 0 {
 					break;
 				}
-				hash.consume(&buf);
+				hash.consume(&buf[..len]);
 			}
 			let hash = format!("\"{:x}\"", hash.compute());
 
