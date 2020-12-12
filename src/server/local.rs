@@ -8,7 +8,7 @@ use bollard::Docker;
 use std::{ffi::OsString, path::Path};
 use tokio::{
 	fs::{self, File},
-	io::AsyncReadExt,
+	io::{self, AsyncReadExt},
 	stream::StreamExt
 };
 
@@ -31,7 +31,8 @@ impl Server for LocalServer {
 	}
 
 	fn repomount(&self, repodir: &Path) -> String {
-		repodir.to_str().unwrap().to_owned()
+		let repomount = std::fs::canonicalize(repodir).unwrap();
+		repomount.to_str().unwrap().to_owned()
 	}
 
 	fn cores(&self) -> u16 {
@@ -70,11 +71,17 @@ impl Server for LocalServer {
 			etag_name.push(".etag");
 			let etag_path = parent.join(&etag_name);
 
-			let mut etag_file = File::open(&etag_path).await?;
-			let mut etag = String::new();
-			etag_file.read_to_string(&mut etag).await?;
+			let etag = match File::open(&etag_path).await {
+				Ok(mut etag_file) => {
+					let mut etag = String::new();
+					etag_file.read_to_string(&mut etag).await?;
+					Some(etag)
+				},
+				Err(err) if err.kind() == io::ErrorKind::NotFound => None,
+				Err(err) => return Err(err.into())
+			};
 
-			if etag != hash {
+			if etag != Some(hash) {
 				let key = format!("{}/alpine-rust/x86_64/{}", config.alpine, file_name.to_string_lossy());
 				if let Err(err) = repo::upload(&path, &key).await {
 					error!("Error uploading {}: {}", path.display(), err);

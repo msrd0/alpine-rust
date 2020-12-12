@@ -199,6 +199,9 @@ async fn main() {
 		Ok(caddy) => caddy,
 		Err(err) => {
 			error!("Unable to start caddy container: {}", err);
+			if let Some(cause) = err.source() {
+				error!("Cause: {}", cause);
+			}
 			exit(1);
 		}
 	};
