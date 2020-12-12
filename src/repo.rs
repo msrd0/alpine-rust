@@ -83,11 +83,44 @@ pub(super) async fn upload(path: impl AsRef<Path>, key: &str) -> anyhow::Result<
 	let bucket = Bucket::new_with_path_style(MINIO_BUCKET_NAME, REGION.clone(), creds).context("Failed to open bucket")?;
 
 	let path = path.as_ref();
+	let parent = path.parent().ok_or(anyhow!("{} does not have a parent", path.display()))?;
+	let file_name = path
+		.file_name()
+		.ok_or(anyhow!("{} does not have a filename", path.display()))?;
+
 	info!("Uploading {} from {}", key, path.display());
 	bucket
 		.put_object_stream(path, key)
 		.await
 		.context("Failed to upload to bucket")?;
+
+	let mut file = File::open(&path).await?;
+	let mut hash = md5::Context::new();
+	let mut buf = [0u8; 8192];
+	loop {
+		let len = file.read(&mut buf).await?;
+		if len == 0 {
+			break;
+		}
+		hash.consume(&buf[..len]);
+	}
+	let hash = format!("\"{:x}\"", hash.compute());
+
+	let mut etag_name = OsString::from(".");
+	etag_name.push(file_name);
+	etag_name.push(".etag");
+	let etag_path = parent.join(&etag_name);
+
+	let mut etag_file = match File::create(etag_path).await {
+		Ok(file) => file,
+		Err(err) => {
+			error!("Failed to create etag file: {}", err);
+			return Ok(());
+		}
+	};
+	if let Err(err) = etag_file.write_all(hash.as_bytes()).await {
+		error!("Failed to write etag file: {}", err);
+	}
 
 	Ok(())
 }
