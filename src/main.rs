@@ -1,16 +1,16 @@
 #[macro_use]
+extern crate async_trait;
+#[macro_use]
 extern crate indoc;
 #[macro_use]
 extern crate lazy_static;
 #[macro_use]
 extern crate log;
 
-use bollard::{Docker, API_DEFAULT_VERSION};
-use env::current_dir;
+use either::Either;
 use futures_util::{stream, FutureExt, StreamExt};
 use log::LevelFilter;
-use server::upcloud::{UPCLOUD_IPv6CIDR, UPCLOUD_CORES};
-use std::{borrow::Cow, env, path::PathBuf, process::exit};
+use std::{env, path::PathBuf, process::exit};
 use structopt::StructOpt;
 use tempfile::tempdir;
 use tokio::{
@@ -27,6 +27,7 @@ mod server;
 mod templates;
 
 use config::*;
+use server::{local::LocalServer, upcloud::UpcloudServer, Server};
 
 lazy_static! {
 	static ref GITHUB_TOKEN: String = env::var("GITHUB_TOKEN").expect("GITHUB_TOKEN must be set");
@@ -156,66 +157,38 @@ async fn main() {
 		.join(", ");
 	info!("The following rust versions will be updated: {}", pkg_updates_str);
 
-	// connect to docker
-	let (mut server, docker) = if args.docker_local {
-		info!("Connecting to local docker daemon");
-		let docker = Docker::connect_with_local_defaults().expect("Failed to connect to docker");
-		(None, docker)
+	// connect to docker - create a server
+	let server = if args.docker_local {
+		Either::Left(LocalServer::new())
 	} else if args.docker_upcloud {
-		// create an upcloud server
-		let server = server::upcloud::create_server()
-			.await
-			.expect("Failed to create UpCloud server");
-
-		let server = match server::upcloud::install_server(&config, &server, &repodir).await {
-			Ok(server) => server,
-			Err(err) => {
-				error!("Failed to install server: {}", err);
-				server.destroy().await.expect("Failed to destroy the server");
-				exit(1);
-			}
-		};
-
-		let docker_addr = format!("tcp://{}:8443/", server.domain);
-		info!("Connecting to {}", docker_addr);
-		let docker = Docker::connect_with_ssl(
-			&docker_addr,
-			&server.keys.client_key_path(),
-			&server.keys.client_cert_path(),
-			&server.keys.ca_path(),
-			120,
-			API_DEFAULT_VERSION
-		);
-		let docker = match docker {
-			Ok(docker) => docker,
-			Err(err) => {
-				error!("Failed to connect to docker: {}", err);
-				server.destroy().await.expect("Failed to destroy the server");
-				exit(1);
-			}
-		};
-		info!("Connected to {}", docker_addr);
-
-		(Some(server), docker)
+		Either::Right(UpcloudServer::create(&config).await.expect("Failed to create UpCloud server"))
 	} else {
 		error!("Unable to connect to docker daemon: No docker daemon specified");
 		exit(1);
 	};
 
-	// determine the docker environment
-	let (repomount, jobs, cidr_v6) = match &server {
-		Some(_) => (
-			Cow::Borrowed("/var/lib/alpine-rust"),
-			UPCLOUD_CORES,
-			UPCLOUD_IPv6CIDR.to_owned()
-		),
-		None => (
-			current_dir().unwrap().join("repo").to_string_lossy().to_string().into(),
-			num_cpus::get() as u16,
-			docker::local_ipv6_cidr()
-				.expect("Failed to parse /etc/docker/daemon.json - Is your docker daemon IPv6-enabled?")
-		)
+	// connect to docker - install the server
+	if let Err(err) = server.install(&config, &repodir).await {
+		error!("Failed to install server: {}", err);
+		server.destroy().await.expect("Failed to destroy the server");
+		exit(1);
+	}
+
+	// connect to docker
+	let docker = match server.connect_to_docker() {
+		Ok(docker) => docker,
+		Err(err) => {
+			error!("Failed to connect to docker: {}", err);
+			server.destroy().await.expect("Failed to destroy the server");
+			exit(1);
+		}
 	};
+	info!("Connected to docker daemon");
+
+	// determine the docker environment
+	let repomount = server.repomount(&repodir);
+	let jobs = server.cores();
+	let cidr_v6 = server.cidr_v6();
 
 	// start our local caddy server
 	if let Err(err) = docker::build_caddy(&docker, &config).await {
@@ -238,9 +211,8 @@ async fn main() {
 		} else {
 			if let Err(err) = build::rust::build_package(&repomount, &docker, &config, ver, jobs).await {
 				error!("Failed to build package: {}", err);
-				if let Some(server) = server {
-					server.destroy().await.expect("Failed to destroy the server");
-				}
+				server.destroy().await.expect("Failed to destroy the server");
+
 				exit(1);
 			}
 		}
@@ -249,22 +221,16 @@ async fn main() {
 		if let Err(err) = build::rust::test_package(&docker, &cidr_v6, &config, ver).await {
 			error!("Testing package failed: {}", err);
 			// TODO maybe upload the package somewhere for manual inspection
-			if let Some(server) = server {
-				server.destroy().await.expect("Failed to destroy the server");
-			}
+			server.destroy().await.expect("Failed to destroy the server");
+
 			exit(1);
 		}
 
 		// upload the changes
 		if !args.skip_rust_packages && args.upload_packages {
-			if let Some(mut server) = server.as_mut() {
-				if let Err(err) = server::upcloud::commit_changes(&config, &repodir, &mut server).await {
-					error!("Failed to commit changes: {}", err);
-					server.destroy().await.expect("Failed to destroy the server");
-					exit(1);
-				}
-			} else {
-				error!("Uploading packages without upcloud is not supported");
+			if let Err(err) = server.upload_repo_changes(&config, &repodir).await {
+				error!("Failed to commit changes: {}", err);
+				server.destroy().await.expect("Failed to destroy the server");
 				exit(1);
 			}
 		}
@@ -275,9 +241,7 @@ async fn main() {
 		} else {
 			if let Err(err) = build::rust::build_and_upload_docker(&docker, &config, ver, args.upload_docker).await {
 				error!("Failed to build docker images: {}", err);
-				if let Some(server) = server {
-					server.destroy().await.expect("Failed to destroy the server");
-				}
+				server.destroy().await.expect("Failed to destroy the server");
 				exit(1);
 			}
 		}
@@ -289,7 +253,5 @@ async fn main() {
 	}
 
 	// remove the server
-	if let Some(server) = server {
-		server.destroy().await.expect("Failed to destroy the server");
-	}
+	server.destroy().await.expect("Failed to destroy the server");
 }
