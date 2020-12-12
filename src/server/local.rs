@@ -5,7 +5,7 @@ use crate::{
 };
 use anyhow::anyhow;
 use bollard::Docker;
-use std::{ffi::OsString, path::Path};
+use std::{ffi::OsString, os::unix::ffi::OsStrExt, path::Path};
 use tokio::{
 	fs::{self, File},
 	io::{self, AsyncReadExt},
@@ -53,6 +53,9 @@ impl Server for LocalServer {
 			let file_name = path
 				.file_name()
 				.ok_or(anyhow!("{} does not have a filename", path.display()))?;
+			if file_name.as_bytes()[0] == '.' as u8 {
+				continue;
+			}
 
 			let mut file = File::open(&path).await?;
 			let mut hash = md5::Context::new();
