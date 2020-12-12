@@ -12,7 +12,7 @@ use bollard::{
 	Docker
 };
 use futures_util::StreamExt;
-use std::{collections::HashMap, env, io::Cursor, path::Path, process::exit};
+use std::{collections::HashMap, io::Cursor, path::Path, process::exit};
 use tokio::{
 	fs::{self, File},
 	io::{self, AsyncReadExt},
@@ -251,11 +251,6 @@ async fn docker_build_dockerfile(docker: &Docker, tag: &str, dockerfile: &str, c
 }
 
 async fn docker_push(docker: &Docker, tag: &str) -> anyhow::Result<()> {
-	if env::var("CI").is_err() {
-		info!("Running outside CI - not pushing {}", tag);
-		return Ok(());
-	}
-
 	info!("Pushing Docker image {}", tag);
 	let mut push_stream = docker.push_image::<String>(
 		&tag,
