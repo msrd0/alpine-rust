@@ -1,10 +1,16 @@
 use super::Server;
 use crate::{
 	docker::{local_ipv6_cidr, IPv6CIDR},
-	Config
+	repo, Config
 };
+use anyhow::anyhow;
 use bollard::Docker;
-use std::path::Path;
+use std::{ffi::OsString, path::Path};
+use tokio::{
+	fs::{self, File},
+	io::AsyncReadExt,
+	stream::StreamExt
+};
 
 pub struct LocalServer;
 
@@ -36,8 +42,48 @@ impl Server for LocalServer {
 		local_ipv6_cidr().expect("Failed to parse /etc/docker/daemon.json - Is your docker daemon IPv6-enabled?")
 	}
 
-	async fn upload_repo_changes(&self, _config: &Config, _repodir: &Path) -> anyhow::Result<()> {
-		anyhow::bail!("Uploading changes is not supported without UpCloud")
+	async fn upload_repo_changes(&self, config: &Config, repodir: &Path) -> anyhow::Result<()> {
+		let dir = repodir.join(format!("{}/alpine-rust/x86_64", config.alpine));
+
+		let mut res: anyhow::Result<()> = Ok(());
+		while let Some(file) = fs::read_dir(&dir).await?.next().await {
+			let path = file?.path();
+			let parent = path.parent().ok_or(anyhow!("{} does not have a parent", path.display()))?;
+			let file_name = path
+				.file_name()
+				.ok_or(anyhow!("{} does not have a filename", path.display()))?;
+
+			let mut file = File::open(&path).await?;
+			let mut hash = md5::Context::new();
+			let mut buf = [0u8; 8192];
+			loop {
+				let len = file.read(&mut buf).await?;
+				if len == 0 {
+					break;
+				}
+				hash.consume(&buf);
+			}
+			let hash = format!("\"{:x}\"", hash.compute());
+
+			let mut etag_name = OsString::from(".");
+			etag_name.push(file_name);
+			etag_name.push(".etag");
+			let etag_path = parent.join(&etag_name);
+
+			let mut etag_file = File::open(&etag_path).await?;
+			let mut etag = String::new();
+			etag_file.read_to_string(&mut etag).await?;
+
+			if etag != hash {
+				let key = format!("{}/alpine-rust/x86_64/{}", config.alpine, file_name.to_string_lossy());
+				if let Err(err) = repo::upload(&path, &key).await {
+					error!("Error uploading {}: {}", path.display(), err);
+					res = Err(err);
+				}
+			}
+		}
+
+		res
 	}
 
 	async fn destroy(self) -> anyhow::Result<()> {

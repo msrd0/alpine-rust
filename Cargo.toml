@@ -42,6 +42,7 @@ ssh2 = "0.9"
 tar = "0.4"
 
 # communication with the repository
+md5 = "0.7"
 rust-s3 = { version = "0.26", features = ["rustls-tls"], default-features = false }
 
 # dataformat

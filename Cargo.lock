@@ -35,6 +35,7 @@ dependencies = [
  "indoc",
  "lazy_static",
  "log",
+ "md5",
  "num_cpus",
  "openssl",
  "pretty_env_logger",
