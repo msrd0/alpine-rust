@@ -10,7 +10,7 @@ extern crate log;
 use either::Either;
 use futures_util::{stream, FutureExt, StreamExt};
 use log::LevelFilter;
-use std::{env, path::PathBuf, process::exit};
+use std::{env, path::PathBuf, process::exit, sync::Arc};
 use structopt::StructOpt;
 use tempfile::tempdir;
 use tokio::{
@@ -183,6 +183,7 @@ async fn main() {
 			exit(1);
 		}
 	};
+	let docker = Arc::new(docker);
 	info!("Connected to docker daemon");
 
 	// determine the docker environment
@@ -221,7 +222,7 @@ async fn main() {
 		}
 
 		// test the package
-		if let Err(err) = build::rust::test_package(&docker, &cidr_v6, &config, ver).await {
+		if let Err(err) = build::rust::test_package(docker.clone(), &cidr_v6, &config, ver).await {
 			error!("Testing package failed: {}", err);
 			// TODO maybe upload the package somewhere for manual inspection
 			server.destroy().await.expect("Failed to destroy the server");

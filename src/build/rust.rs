@@ -2,7 +2,7 @@ use crate::{
 	docker::{build_image, run_container_to_completion, tar_header, IPv6CIDR},
 	Config, Version, GITHUB_TOKEN
 };
-use anyhow::Context;
+use anyhow::anyhow;
 use askama::Template;
 use bollard::{
 	auth::DockerCredentials,
@@ -12,10 +12,11 @@ use bollard::{
 	Docker
 };
 use futures_util::StreamExt;
-use std::{collections::HashMap, io::Cursor, path::Path, process::exit};
+use std::{collections::HashMap, io::Cursor, path::Path, process::exit, sync::Arc};
 use tokio::{
 	fs::{self, File},
-	io::{self, AsyncReadExt}
+	io::{self, AsyncReadExt},
+	task::{spawn, JoinHandle}
 };
 
 pub async fn up_to_date(repodir: &Path, config: &Config, ver: &Version) -> bool {
@@ -135,22 +136,22 @@ async fn docker_run_abuild(docker: &Docker, img: &str, repomount: &str) -> anyho
 	run_container_to_completion(docker, &container.id).await
 }
 
-async fn docker_run_test(docker: &Docker, img: &str, cmd: &str) -> anyhow::Result<()> {
+async fn docker_run_test(docker: Arc<Docker>, img: String, cmd: String) -> anyhow::Result<()> {
 	info!("Creating container for {}", img);
 
 	// create the container
 	let container = docker
-		.create_container::<String, &str>(None, container::Config {
-			cmd: Some(vec!["/bin/ash", "-exo", "pipefail", "-c", cmd]),
+		.create_container::<String, _>(None, container::Config {
+			cmd: Some(vec!["/bin/ash", "-exo", "pipefail", "-c", &cmd]),
 			attach_stdout: Some(true),
 			attach_stderr: Some(true),
-			image: Some(img),
+			image: Some(&img),
 			..Default::default()
 		})
 		.await?;
 	info!("Created container {}", container.id);
 
-	run_container_to_completion(docker, &container.id).await
+	run_container_to_completion(&docker, &container.id).await
 }
 
 async fn docker_build_dockerfile(docker: &Docker, tag: &str, dockerfile: &str, config: &Config) -> anyhow::Result<()> {
@@ -215,7 +216,7 @@ pub async fn build_package(
 }
 
 pub async fn test_package(
-	docker: &Docker,
+	docker: Arc<Docker>,
 	cidr_v6: &IPv6CIDR<String>,
 	config: &Config,
 	ver: &Version
@@ -223,7 +224,7 @@ pub async fn test_package(
 	let tag = format!("alpine-rust-test-1.{}", ver.rustminor);
 
 	let dockerfile = config.rust_dockerfile_test(cidr_v6).render()?;
-	docker_build_dockerfile(docker, &tag, &dockerfile, config).await?;
+	docker_build_dockerfile(&docker, &tag, &dockerfile, config).await?;
 
 	// TODO is this the best way to get all packages?
 	let packages = [
@@ -246,21 +247,23 @@ pub async fn test_package(
 	.map(|tpl| tpl.replace("{}", &format!("1.{}", ver.rustminor)))
 	.collect::<Vec<_>>();
 
+	let mut tests: Vec<(JoinHandle<anyhow::Result<()>>, String)> = Vec::new();
+
 	// first of all, let's test that every package can be installed on its own
 	for pkg in &packages {
 		info!("Testing installation of {}", pkg);
 		let cmd = format!("apk add {}", pkg);
-		docker_run_test(docker, &tag, &cmd)
-			.await
-			.context(format!("Failed to install {}", pkg))?;
+		let task = spawn(docker_run_test(docker.clone(), tag.clone(), cmd));
+		let err = format!("Failed to install {}", pkg);
+		tests.push((task, err));
 	}
 
 	// next, let's test they can all be installed alongside each other
 	info!("Testing installation of all packages for 1.{}", ver.rustminor);
 	let cmd = format!("apk add {}", packages.join(" "));
-	docker_run_test(docker, &tag, &cmd)
-		.await
-		.context(format!("Failed to install all packages for 1.{}", ver.rustminor))?;
+	let task = spawn(docker_run_test(docker.clone(), tag.clone(), cmd));
+	let err = format!("Failed to install all packages for 1.{}", ver.rustminor);
+	tests.push((task, err));
 
 	// and finally, test a small rust program that uses derive macros
 	info!("Testing a small rust program");
@@ -307,11 +310,19 @@ pub async fn test_package(
 		"RUSTFLAGS=\"-C linker=clang -C link-arg=-fuse-ld=lld\" cargo run".to_owned(),
 	]
 	.join(" && ");
-	docker_run_test(docker, &tag, &cmd)
-		.await
-		.context("Failed to run simple rust program")?;
+	let task = spawn(docker_run_test(docker.clone(), tag.clone(), cmd));
+	let err = format!("Failed to run simple rust program with 1.{}", ver.rustminor);
+	tests.push((task, err));
 
-	Ok(())
+	let mut res = Ok(());
+	for (test, err_msg) in tests {
+		if let Err(err) = test.await {
+			error!("{}: {}", err_msg, err);
+			res = Err(anyhow!(err_msg));
+		}
+	}
+
+	res
 }
 
 pub async fn build_and_upload_docker(
