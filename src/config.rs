@@ -178,8 +178,8 @@ pub async fn update_config(config_path: &PathBuf) {
 			.current_dir(&dir)
 			.env("GIT_AUTHOR_NAME", "drone.msrd0.eu [bot]")
 			.env("GIT_AUTHOR_EMAIL", "noreply@drone.msrd0.eu")
-			.env("GIT_COMMITER_NAME", "drone.msrd0.eu [bot]")
-			.env("GIT_COMMITER_EMAIL", "noreply@drone.msrd0.eu")
+			.env("GIT_COMMITTER_NAME", "drone.msrd0.eu [bot]")
+			.env("GIT_COMMITTER_EMAIL", "noreply@drone.msrd0.eu")
 			.status()
 			.expect("Failed to run git commit");
 		Command::new("git")
