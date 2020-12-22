@@ -116,16 +116,16 @@ fd39d2d86e56d4dd1ad3c044aec9f417b8fafedf954d3a53540bd138bec7632a450668e664b555ab
 """
 
 [channel.stable]
-_version = "1.48.0.20201116"
+_version = "1.48.0.20201119"
 channel = "stable"
 rustminor = 48
 rustpatch = 0
 pkgrel = 1
-date = "2020-11-16"
+date = "2020-11-19"
 llvmver = 10
 bootver = "1.47"
 bootsys = false
 sha512sums = '''
-8320f312be5f51798942ce57191d04f04e52b06299dac2cee6ac8206509499a79501b8bf295ef3643571074d5b4cd8695cc779731adc0f5a9f73880b84e927a8  rustc-1.48.0-src.tar.gz
+e28e5f0813cfd94fb92399a2d64aa19bdf0933b5fc768ea10da2a5b787c94bac6a5efb98b2c3702da3d1c46c6766b157df3727e5845b4b83a237b44ec45b27ba  rustc-1.48.0-src.tar.gz
 d027be348eb1718865cb187108f75c840c59c35f8a427fead9bdbceb6abbc8026aa4984c0d32be62652d81e16fd987627f5a162163b76bc789cf00f1550f61b8  1.48.tar.gz
 '''
