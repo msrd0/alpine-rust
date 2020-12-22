@@ -30,6 +30,7 @@ use config::*;
 use server::{local::LocalServer, upcloud::UpcloudServer, Server};
 
 lazy_static! {
+	static ref CLIENT: reqwest::Client = reqwest::Client::new();
 	static ref GITHUB_TOKEN: String = env::var("GITHUB_TOKEN").expect("GITHUB_TOKEN must be set");
 }
 
@@ -41,8 +42,12 @@ struct Args {
 	verbose: u8,
 
 	/// Configuration file
-	#[structopt(short, long, default_value = "config.toml")]
+	#[structopt(long, default_value = "config.toml")]
 	config: PathBuf,
+
+	/// Update the configuration file if a newer rust version was found
+	#[structopt(short = "c", long)]
+	update_config: bool,
 
 	/// Use custom dir to download the repository
 	#[structopt(short, long)]
@@ -95,6 +100,10 @@ async fn main() {
 			_ => LevelFilter::Trace
 		})
 		.init();
+
+	if args.update_config {
+		config::update_config(&args.config).await;
+	}
 
 	info!("Reading config.toml");
 	let mut config_file = File::open(&args.config).await.expect("Unable to find config file");

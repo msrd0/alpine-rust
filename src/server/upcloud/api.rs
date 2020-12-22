@@ -1,11 +1,8 @@
 use super::{UPCLOUD_CORES, UPCLOUD_MEMORY, UPCLOUD_STORAGE};
+use crate::CLIENT;
 use serde::{Deserialize, Serialize};
 use std::{env, time::Duration};
 use tokio::time::delay_for;
-
-lazy_static! {
-	static ref CLIENT: reqwest::Client = reqwest::Client::new();
-}
 
 #[derive(Serialize)]
 pub struct CreateServerRequest<'a> {

@@ -123,9 +123,11 @@ impl Version {
 		#[derive(Template)]
 		#[template(path = "rust/APKBUILD")]
 		struct ApkbuildTemplate<'t> {
+			channel: Option<&'t str>,
 			rustminor: u32,
 			rustpatch: u32,
 			pkgrel: u32,
+			date: Option<&'t str>,
 			llvmver: u32,
 			bootver: &'t str,
 			bootsys: bool,
@@ -135,9 +137,11 @@ impl Version {
 		}
 
 		ApkbuildTemplate {
+			channel: self.channel.as_deref(),
 			rustminor: self.rustminor,
 			rustpatch: self.rustpatch,
 			pkgrel: self.pkgrel,
+			date: self.channel.as_deref(),
 			llvmver: self.llvmver,
 			bootver: &self.bootver,
 			bootsys: self.bootsys,

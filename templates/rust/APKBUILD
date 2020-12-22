@@ -7,8 +7,17 @@
 # Contributor: Jeizsm <jeizsm@gmail.com>
 # Maintainer: Dominic Meiser <alpine@msrd0.de>
 _rustver=1.{{ rustminor }}
-pkgname=rust-$_rustver
-pkgver=$_rustver.{{ rustpatch }}
+{% if channel.is_some() -%}
+_channel={{ channel.as_deref().unwrap() }}
+{% else -%}
+_channel=$_rustver
+{% endif -%}
+{% if date.is_some() -%}
+_date={{ date.as_deref().unwrap() }}
+{% endif -%}
+pkgname=rust-$_channel
+_pkgver=$_rustver.{{ rustpatch }}
+pkgver=$_pkgver${_date+.${_date//-/}}
 _llvmver={{ llvmver }}
 _bootver={{ bootver }}
 pkgrel={{ pkgrel }}
@@ -27,9 +36,7 @@ _python={{ python.as_deref().unwrap() }}
 {% else -%}
 _python=python3
 {% endif %}
-# * Rust is self-hosted, so you need rustc (and cargo) to build rustc...
-#   The last revision of this abuild that does not depend on itself (uses
-#   prebuilt rustc and cargo) is 2e6769eb39eaff3029d8298fc02856623c563cd8.
+# Rust is self-hosted, so you need rustc (and cargo) to build rustc...
 makedepends_build="
 	$_python
 	file
@@ -68,18 +75,18 @@ subpackages="
 	$pkgname-lldb::noarch
 	$pkgname-doc
 	$pkgname-src::noarch
-	rustfmt-$_rustver:_rustfmt
-	cargo-$_rustver:_cargo
-	cargo-$_rustver-bash-completions:_cargo_bashcomp:noarch
-	cargo-$_rustver-zsh-completion:_cargo_zshcomp:noarch
-	cargo-$_rustver-doc:_cargo_doc:noarch
-	clippy-$_rustver:_clippy
+	rustfmt-$_channel:_rustfmt
+	cargo-$_channel:_cargo
+	cargo-$_channel-bash-completions:_cargo_bashcomp:noarch
+	cargo-$_channel-zsh-completion:_cargo_zshcomp:noarch
+	cargo-$_channel-doc:_cargo_doc:noarch
+	clippy-$_channel:_clippy
 	"
 source="
-	https://static.rust-lang.org/dist/rustc-$pkgver-src.tar.gz
+	https://static.rust-lang.org/dist/${_date+$_date/}rustc-$_pkgver-src.tar.gz
 	https://github.com/msrd0/alpine-rust/archive/patches/$_rustver.tar.gz
 "
-builddir="$srcdir/rustc-$pkgver-src"
+builddir="$srcdir/rustc-$_pkgver-src"
 
 # secfixes:
 #   1.34.2-r0:

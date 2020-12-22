@@ -163,7 +163,7 @@ steps:
       - apt-get update -y
       - apt-get install -y --no-install-recommends ca-certificates libgcc1 libssh2-1 libssl1.1
       - mkdir -p target/repo
-      - ./target/debug/alpine-rust -u -d -m -p -r target/repo
+      - ./target/debug/alpine-rust -c -u -d -m -p -r target/repo
   
   - name: rebuild-cache
     image: meltwater/drone-cache:v1
@@ -198,6 +198,7 @@ steps:
 
 environment:
   CARGO_HOME: target/cargo
+  #LIBGIT2_SYS_USE_PKG_CONFIG: 1 # too old on debian
   LIBSSH2_SYS_USE_PKG_CONFIG: 1
   RUST_BACKTRACE: 1
 
