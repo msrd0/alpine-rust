@@ -161,7 +161,7 @@ steps:
         from_secret: UPCLOUD_PASSWORD
     commands:
       - apt-get update -y
-      - apt-get install -y --no-install-recommends ca-certificates libgcc1 libssh2-1 libssl1.1
+      - apt-get install -y --no-install-recommends ca-certificates git libgcc1 libssh2-1 libssl1.1
       - mkdir -p target/repo
       - ./target/debug/alpine-rust -c -u -d -m -p -r target/repo
   
