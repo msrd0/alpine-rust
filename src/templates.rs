@@ -141,7 +141,7 @@ impl Version {
 			rustminor: self.rustminor,
 			rustpatch: self.rustpatch,
 			pkgrel: self.pkgrel,
-			date: self.channel.as_deref(),
+			date: self.date.as_deref(),
 			llvmver: self.llvmver,
 			bootver: &self.bootver,
 			bootsys: self.bootsys,

@@ -20,13 +20,19 @@ use tokio::{
 };
 
 pub async fn up_to_date(repodir: &Path, config: &Config, ver: &Version) -> bool {
+	let pkgname = match ver.channel.as_ref() {
+		Some(channel) => format!("rust-{}", channel),
+		None => format!("rust-1.{}", ver.rustminor)
+	};
+	let pkgver = match ver.date.as_ref() {
+		Some(date) => format!("1.{}.{}.{}", ver.rustminor, ver.rustpatch, date.replace("-", "")),
+		None => format!("1.{}.{}", ver.rustminor, ver.rustpatch)
+	};
 	let path = format!(
-		"{alpine}/alpine-rust/x86_64/rust-1.{minor}-1.{minor}.{patch}-r{pkgrel}.apk",
-		alpine = config.alpine,
-		minor = ver.rustminor,
-		patch = ver.rustpatch,
-		pkgrel = ver.pkgrel
+		"{}/alpine-rust/x86_64/{}-{}-r{}.apk",
+		config.alpine, pkgname, pkgver, ver.pkgrel
 	);
+	info!("Checking if {} is up to date ...", path);
 	match fs::metadata(repodir.join(path)).await {
 		Ok(_) => true,                                              // file exists
 		Err(err) if err.kind() == io::ErrorKind::NotFound => false, // not found

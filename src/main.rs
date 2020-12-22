@@ -141,16 +141,18 @@ async fn main() {
 
 	// search for versions that need to be updated
 	let pkg_updates;
+	let config_ver_iter = config.versions.iter().chain(config.channel.values());
 	if args.versions.is_empty() {
-		pkg_updates = stream::iter(config.versions.iter())
+		pkg_updates = stream::iter(config_ver_iter)
 			.filter(|ver| build::rust::up_to_date(&repodir, &config, ver).map(|up_to_date| !up_to_date))
 			.collect::<Vec<_>>()
 			.await;
 	} else {
-		pkg_updates = config
-			.versions
-			.iter()
-			.filter(|ver| args.versions.contains(&format!("1.{}", ver.rustminor)))
+		pkg_updates = config_ver_iter
+			.filter(|ver| match ver.channel.as_ref() {
+				Some(channel) => args.versions.contains(channel),
+				None => args.versions.contains(&format!("1.{}", ver.rustminor))
+			})
 			.collect::<Vec<_>>()
 	}
 
@@ -161,7 +163,10 @@ async fn main() {
 	}
 	let pkg_updates_str = pkg_updates
 		.iter()
-		.map(|ver| format!("1.{}", ver.rustminor))
+		.map(|ver| match ver.channel.clone() {
+			Some(channel) => channel,
+			None => format!("1.{}", ver.rustminor)
+		})
 		.collect::<Vec<_>>()
 		.join(", ");
 	info!("The following rust versions will be updated: {}", pkg_updates_str);

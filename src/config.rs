@@ -100,22 +100,24 @@ pub async fn update_config(config_path: &PathBuf) {
 		}
 
 		let version_raw = channel_metadata["pkg"][rust_name]["version"].as_str().unwrap();
-		info!("Channel {} is at version {}", channel, version_raw);
-		let version = VERSION_REGEX.replace(version_raw, "1.$minor.$patch.$y$m$d");
+		let version_match = VERSION_REGEX.captures_iter(version_raw).next().unwrap();
+		let minor: i64 = version_match["minor"].parse().unwrap();
+		let patch: i64 = version_match["patch"].parse().unwrap();
+		let date_raw = channel_metadata["date"].as_str().unwrap();
+		let date_condensed = date_raw.replace("-", "");
+		let version = format!("1.{}.{}.{}", minor, patch, date_condensed);
+		info!(
+			"Channel {} is at version {} (raw: {} from {})",
+			channel, version, version_raw, date_raw
+		);
 
 		if config["channel"][channel]["_version"].as_str() != Some(&version) {
-			let version_match = VERSION_REGEX.captures_iter(version_raw).next().unwrap();
-			let minor: i64 = version_match["minor"].parse().unwrap();
-			let patch: i64 = version_match["patch"].parse().unwrap();
-			let year: i64 = version_match["y"].parse().unwrap();
-			let month: i64 = version_match["m"].parse().unwrap();
-			let day: i64 = version_match["d"].parse().unwrap();
-			let date = format!("{}-{}-{}", year, month, day);
+			info!("Updating channel {} to {}", channel, version);
 
 			let mut sha512sums = "\n".to_owned();
 			let rust_src = get(&format!(
 				"https://static.rust-lang.org/dist/{}/rustc-1.{}.{}-src.tar.gz",
-				date, minor, patch
+				date_raw, minor, patch
 			))
 			.await
 			.expect("Failed to query rust src")
@@ -144,7 +146,6 @@ pub async fn update_config(config_path: &PathBuf) {
 			.finalize();
 			sha512sums += &format!("{:x}  1.{}.tar.gz\n", patches, minor);
 
-			info!("Updating channel {} to {}", channel, version);
 			let mut tbl = table();
 			tbl.as_table_mut().unwrap().set_implicit(true);
 			tbl["_version"] = value(version.as_ref());
@@ -152,7 +153,7 @@ pub async fn update_config(config_path: &PathBuf) {
 			tbl["rustminor"] = value(minor);
 			tbl["rustpatch"] = value(patch);
 			tbl["pkgrel"] = value(1);
-			tbl["date"] = value(date);
+			tbl["date"] = value(date_raw);
 			tbl["llvmver"] = value(10);
 			tbl["bootver"] = value(format!("1.{}", minor - 1));
 			tbl["bootsys"] = value(false);
