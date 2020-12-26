@@ -65,39 +65,43 @@ impl Config {
 		}
 	}
 
-	pub fn rust_dockerfile_default<'a>(&'a self, ver: Option<&'a Version>) -> impl Template + 'a {
+	pub fn rust_dockerfile_default<'a>(&'a self, ver: &'a Version) -> impl Template + 'a {
 		#[derive(Template)]
 		#[template(path = "rust/default.Dockerfile")]
 		struct DockerfileDefault<'t> {
 			alpine: &'t str,
 			pubkey: &'t str,
-			rustver: Option<Rustver>
+			channel: Option<&'t str>,
+			rustver: Rustver
 		}
 
 		DockerfileDefault {
 			alpine: &self.alpine,
 			pubkey: &self.pubkey,
-			rustver: ver.map(|ver| Rustver {
+			channel: ver.channel.as_deref(),
+			rustver: Rustver {
 				rustminor: ver.rustminor
-			})
+			}
 		}
 	}
 
-	pub fn rust_dockerfile_minimal<'a>(&'a self, ver: Option<&'a Version>) -> impl Template + 'a {
+	pub fn rust_dockerfile_minimal<'a>(&'a self, ver: &'a Version) -> impl Template + 'a {
 		#[derive(Template)]
 		#[template(path = "rust/minimal.Dockerfile")]
 		struct DockerfileMinimal<'t> {
 			alpine: &'t str,
 			pubkey: &'t str,
-			rustver: Option<Rustver>
+			channel: Option<&'t str>,
+			rustver: Rustver
 		}
 
 		DockerfileMinimal {
 			alpine: &self.alpine,
 			pubkey: &self.pubkey,
-			rustver: ver.map(|ver| Rustver {
+			channel: ver.channel.as_deref(),
+			rustver: Rustver {
 				rustminor: ver.rustminor
-			})
+			}
 		}
 	}
 

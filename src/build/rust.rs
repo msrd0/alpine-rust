@@ -19,6 +19,8 @@ use tokio::{
 	task::{spawn, JoinHandle}
 };
 
+const DOCKER_IMAGE: &str = "ghcr.io/msrd0/alpine-rust";
+
 pub async fn up_to_date(repodir: &Path, config: &Config, ver: &Version) -> bool {
 	let pkgname = match ver.channel.as_ref() {
 		Some(channel) => format!("rust-{}", channel),
@@ -144,11 +146,13 @@ async fn docker_run_abuild(docker: &Docker, img: &str, repomount: &str) -> anyho
 
 async fn docker_run_test(docker: Arc<Docker>, img: String, cmd: String) -> anyhow::Result<()> {
 	info!("Creating container for {}", img);
+	let cmd = vec!["/bin/ash", "-exo", "pipefail", "-c", &cmd];
+	debug!("Running test command {:?}", cmd);
 
 	// create the container
 	let container = docker
 		.create_container::<String, _>(None, container::Config {
-			cmd: Some(vec!["/bin/ash", "-exo", "pipefail", "-c", &cmd]),
+			cmd: Some(cmd),
 			attach_stdout: Some(true),
 			attach_stderr: Some(true),
 			image: Some(&img),
@@ -227,12 +231,15 @@ pub async fn test_package(
 	config: &Config,
 	ver: &Version
 ) -> anyhow::Result<()> {
+	info!("Testing build packages ...");
+
 	let tag = format!("alpine-rust-test-1.{}", ver.rustminor);
 
 	let dockerfile = config.rust_dockerfile_test(cidr_v6).render()?;
 	docker_build_dockerfile(&docker, &tag, &dockerfile, config).await?;
 
 	// TODO is this the best way to get all packages?
+	let channel = ver.channel.clone().unwrap_or_else(|| format!("1.{}", ver.rustminor));
 	let packages = [
 		"cargo-{}",
 		"cargo-{}-bash-completions",
@@ -250,14 +257,13 @@ pub async fn test_package(
 		"rustfmt-{}"
 	]
 	.iter()
-	.map(|tpl| tpl.replace("{}", &format!("1.{}", ver.rustminor)))
+	.map(|tpl| tpl.replace("{}", &channel))
 	.collect::<Vec<_>>();
 
 	let mut tests: Vec<(JoinHandle<anyhow::Result<()>>, String)> = Vec::new();
 
 	// first of all, let's test that every package can be installed on its own
 	for pkg in &packages {
-		info!("Testing installation of {}", pkg);
 		let cmd = format!("apk add {}", pkg);
 		let task = spawn(docker_run_test(docker.clone(), tag.clone(), cmd));
 		let err = format!("Failed to install {}", pkg);
@@ -265,14 +271,12 @@ pub async fn test_package(
 	}
 
 	// next, let's test they can all be installed alongside each other
-	info!("Testing installation of all packages for 1.{}", ver.rustminor);
 	let cmd = format!("apk add {}", packages.join(" "));
 	let task = spawn(docker_run_test(docker.clone(), tag.clone(), cmd));
-	let err = format!("Failed to install all packages for 1.{}", ver.rustminor);
+	let err = format!("Failed to install all packages for {}", channel);
 	tests.push((task, err));
 
 	// and finally, test a small rust program that uses derive macros
-	info!("Testing a small rust program");
 	let cargo = indoc!(
 		r#"
 		[package]
@@ -305,10 +309,7 @@ pub async fn test_package(
 	"#
 	);
 	let cmd = vec![
-		format!(
-			"apk add cargo-1.{rustminor} clang lld rust-1.{rustminor}",
-			rustminor = ver.rustminor
-		),
+		format!("apk add cargo-{channel} clang lld rust-{channel}", channel = channel),
 		"mkdir -p /tmp/alpine-rust-test/src".to_owned(),
 		"cd /tmp/alpine-rust-test".to_owned(),
 		format!("echo {} | base64 -d >Cargo.toml", base64::encode(cargo)),
@@ -317,18 +318,24 @@ pub async fn test_package(
 	]
 	.join(" && ");
 	let task = spawn(docker_run_test(docker.clone(), tag.clone(), cmd));
-	let err = format!("Failed to run simple rust program with 1.{}", ver.rustminor);
+	let err = format!("Failed to run simple rust program with {}", channel);
 	tests.push((task, err));
 
-	let mut res = Ok(());
+	let mut tests_total: u32 = 0;
+	let mut tests_failed: u32 = 0;
 	for (test, err_msg) in tests {
-		if let Err(err) = test.await {
+		tests_total += 1;
+		if let Err(err) = test.await? {
+			tests_failed += 1;
 			error!("{}: {}", err_msg, err);
-			res = Err(anyhow!(err_msg));
 		}
 	}
 
-	res
+	if tests_failed == 0 {
+		Ok(())
+	} else {
+		Err(anyhow!("{} out of {} tests failed", tests_failed, tests_total))
+	}
 }
 
 pub async fn build_and_upload_docker(
@@ -337,15 +344,25 @@ pub async fn build_and_upload_docker(
 	ver: &Version,
 	upload_docker: bool
 ) -> anyhow::Result<()> {
-	let img = format!("ghcr.io/msrd0/alpine-rust:1.{}-minimal", ver.rustminor);
-	let dockerfile = config.rust_dockerfile_minimal(Some(ver)).render()?;
+	let channel = ver.channel.clone().unwrap_or_else(|| format!("1.{}", ver.rustminor));
+	let tag = match channel.as_str() {
+		"stable" => "latest",
+		channel => channel
+	};
+	let minimal_tag = match channel.as_str() {
+		"stable" => "minimal".to_owned(),
+		channel => format!("{}-minimal", channel)
+	};
+
+	let img = format!("{}:{}", DOCKER_IMAGE, minimal_tag);
+	let dockerfile = config.rust_dockerfile_minimal(ver).render()?;
 	docker_build_dockerfile(docker, &img, &dockerfile, config).await?;
 	if upload_docker {
 		docker_push(docker, &img).await?;
 	}
 
-	let img = format!("ghcr.io/msrd0/alpine-rust:1.{}", ver.rustminor);
-	let dockerfile = config.rust_dockerfile_default(Some(ver)).render()?;
+	let img = format!("{}:{}", DOCKER_IMAGE, tag);
+	let dockerfile = config.rust_dockerfile_default(ver).render()?;
 	docker_build_dockerfile(docker, &img, &dockerfile, config).await?;
 	if upload_docker {
 		docker_push(docker, &img).await?;

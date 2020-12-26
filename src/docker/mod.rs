@@ -65,35 +65,38 @@ pub async fn run_container_to_completion(docker: &Docker, container_id: &str) ->
 	info!("Log stream finished");
 
 	// ensure that the container has stopped
-	loop {
-		delay_for(Duration::new(2, 0)).await;
-		let state = docker.inspect_container(container_id, None).await?.state;
-		let state = match state {
-			Some(state) => state,
-			None => {
-				warn!("Container {} has unknown state", container_id);
+	async fn get_exit_code(docker: &Docker, container_id: &str) -> anyhow::Result<i64> {
+		loop {
+			debug!("Waiting for {}", container_id);
+			delay_for(Duration::new(2, 0)).await;
+			let state = docker.inspect_container(container_id, None).await?.state;
+			let state = match state {
+				Some(state) => state,
+				None => {
+					warn!("Container {} has unknown state", container_id);
+					continue;
+				}
+			};
+			if state.running == Some(true) {
+				info!("Container {} is still running", container_id);
 				continue;
 			}
-		};
-		if state.running == Some(true) {
-			info!("Container {} is still running", container_id);
-			continue;
+			return match state.exit_code {
+				Some(exit_code) => Ok(exit_code),
+				None => {
+					warn!("Unable to get exit code for container {}, assuming 0", container_id);
+					Ok(0)
+				}
+			};
 		}
-		let exit_code = match state.exit_code {
-			Some(exit_code) => exit_code,
-			None => {
-				warn!("Unable to get exit code for container {}, assuming 0", container_id);
-				break;
-			}
-		};
-		if exit_code != 0 {
-			return Err(anyhow::Error::msg(format!(
-				"Container {} finished with exit code {}",
-				container_id, exit_code
-			)));
-		}
-		break;
 	}
-	info!("Container {} has stopped", container_id);
+	let exit_code = get_exit_code(docker, container_id).await?;
+	info!("Container {} has stopped with exit code {}", container_id, exit_code);
+	if exit_code != 0 {
+		return Err(anyhow::Error::msg(format!(
+			"Container {} finished with exit code {}",
+			container_id, exit_code
+		)));
+	}
 	Ok(())
 }

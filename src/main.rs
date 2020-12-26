@@ -94,7 +94,7 @@ struct Args {
 async fn main() {
 	let args = Args::from_args();
 	pretty_env_logger::formatted_timed_builder()
-		.filter_level(match args.verbose {
+		.filter_module("alpine_rust", match args.verbose {
 			0 => LevelFilter::Info,
 			1 => LevelFilter::Debug,
 			_ => LevelFilter::Trace
@@ -128,6 +128,7 @@ async fn main() {
 
 	// create the repo dir if it does not exist yet
 	let x86_64 = repodir.join(format!("{}/alpine-rust/x86_64", config.alpine));
+	debug!("Creating directory {}", x86_64.display());
 	if let Err(err) = fs::create_dir_all(&x86_64).await {
 		warn!("Unable to create {}: {}", x86_64.display(), err);
 	}
@@ -140,6 +141,7 @@ async fn main() {
 	}
 
 	// search for versions that need to be updated
+	debug!("Determining packages that needs updates");
 	let pkg_updates;
 	let config_ver_iter = config.versions.iter().chain(config.channel.values());
 	if args.versions.is_empty() {
@@ -201,6 +203,7 @@ async fn main() {
 	info!("Connected to docker daemon");
 
 	// determine the docker environment
+	debug!("Inspecting docker environment");
 	let repomount = server.repomount(&repodir);
 	let jobs = server.cores();
 	let cidr_v6 = server.cidr_v6();
@@ -225,7 +228,10 @@ async fn main() {
 	for ver in pkg_updates {
 		// build the package
 		if args.skip_rust_packages {
-			info!("Skipping rust packages for 1.{}", ver.rustminor);
+			match ver.channel.as_deref() {
+				Some(channel) => info!("Skipping rust packages for {}", channel),
+				None => info!("Skipping rust packages for 1.{}", ver.rustminor)
+			}
 		} else {
 			if let Err(err) = build::rust::build_package(&repomount, &docker, &config, ver, jobs).await {
 				error!("Failed to build package: {}", err);
@@ -245,7 +251,9 @@ async fn main() {
 		}
 
 		// upload the changes
-		if !args.skip_rust_packages && args.upload_packages {
+		if
+		/* !args.skip_rust_packages && */
+		args.upload_packages {
 			if let Err(err) = server.upload_repo_changes(&config, &repodir).await {
 				error!("Failed to commit changes: {}", err);
 				server.destroy().await.expect("Failed to destroy the server");
