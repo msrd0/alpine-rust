@@ -9,7 +9,7 @@ steps:
     settings:
       backend: "filesystem"
       restore: true
-      cache_key: '{{ .Repo.Name }}_slim_{{ checksum "Cargo.lock" }}_{{ arch }}_{{ os }}'
+      cache_key: '{{ .Repo.Name }}_debug_{{ checksum "Cargo.lock" }}_{{ arch }}_{{ os }}'
       archive_format: "gzip"
       mount:
         - "target"
@@ -18,11 +18,10 @@ steps:
         path: /tmp/cache
   
   - name: check
-    image: rust:slim
+    image: ghcr.io/msrd0/alpine-rust
     pull: always
     commands:
-      - apt-get update -y
-      - apt-get install -y --no-install-recommends libssl-dev pkgconf
+      - apk add --no-cache libgit2-dev libssh2-dev libressl-dev pkgconf
       - cargo -V
       - cargo check
   
@@ -32,7 +31,7 @@ steps:
     settings:
       backend: "filesystem"
       rebuild: true
-      cache_key: '{{ .Repo.Name }}_slim_{{ checksum "Cargo.lock" }}_{{ arch }}_{{ os }}'
+      cache_key: '{{ .Repo.Name }}_debug_{{ checksum "Cargo.lock" }}_{{ arch }}_{{ os }}'
       archive_format: "gzip"
       mount:
         - "target"
@@ -60,6 +59,7 @@ volumes:
 
 environment:
   CARGO_HOME: target/cargo
+  LIBGIT2_SYS_USE_PKG_CONFIG: 1
   LIBSSH2_SYS_USE_PKG_CONFIG: 1
   RUST_BACKTRACE: 1
 
@@ -117,7 +117,7 @@ steps:
     settings:
       backend: "filesystem"
       restore: true
-      cache_key: '{{ .Repo.Name }}_alpine_{{ checksum "Cargo.lock" }}_{{ arch }}_{{ os }}'
+      cache_key: '{{ .Repo.Name }}_release_{{ checksum "Cargo.lock" }}_{{ arch }}_{{ os }}'
       archive_format: "gzip"
       mount:
         - "target"
@@ -126,13 +126,12 @@ steps:
         path: /tmp/cache
   
   - name: build
-    image: rust:slim
+    image: ghcr.io/msrd0/alpine-rust
     pull: always
     commands:
-      - apt-get update -y
-      - apt-get install -y --no-install-recommends libssh2-1-dev libssl-dev pkgconf
+      - apk add --no-cache libgit2-dev libssh2-dev libressl-dev pkgconf
       - cargo -V
-      - cargo build
+      - cargo build --release
   
   - name: secrets
     image: busybox
@@ -147,7 +146,7 @@ steps:
       - echo "$$ABUILD_PRIVKEY" >alpine@msrd0.de-5fc3c0b2.rsa
   
   - name: run
-    image: debian:buster-slim
+    image: alpine
     pull: always
     environment:
       GITHUB_TOKEN:
@@ -160,10 +159,9 @@ steps:
       UPCLOUD_PASSWORD:
         from_secret: UPCLOUD_PASSWORD
     commands:
-      - apt-get update -y
-      - apt-get install -y --no-install-recommends ca-certificates git libgcc1 libssh2-1 libssl1.1
+      - apk add --no-cache ca-certificates git libgcc libgit2 libssh2 libressl
       - mkdir -p target/repo
-      - ./target/debug/alpine-rust -c -u -d -m -p -r target/repo
+      - ./target/release/alpine-rust -c -u -d -m -p -r target/repo -v
   
   - name: rebuild-cache
     image: meltwater/drone-cache:v1
@@ -171,7 +169,7 @@ steps:
     settings:
       backend: "filesystem"
       rebuild: true
-      cache_key: '{{ .Repo.Name }}_alpine_{{ checksum "Cargo.lock" }}_{{ arch }}_{{ os }}'
+      cache_key: '{{ .Repo.Name }}_release_{{ checksum "Cargo.lock" }}_{{ arch }}_{{ os }}'
       archive_format: "gzip"
       mount:
         - "target"
@@ -198,7 +196,7 @@ steps:
 
 environment:
   CARGO_HOME: target/cargo
-  #LIBGIT2_SYS_USE_PKG_CONFIG: 1 # too old on debian
+  LIBGIT2_SYS_USE_PKG_CONFIG: 1
   LIBSSH2_SYS_USE_PKG_CONFIG: 1
   RUST_BACKTRACE: 1
 

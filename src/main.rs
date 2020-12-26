@@ -251,9 +251,7 @@ async fn main() {
 		}
 
 		// upload the changes
-		if
-		/* !args.skip_rust_packages && */
-		args.upload_packages {
+		if args.upload_packages {
 			if let Err(err) = server.upload_repo_changes(&config, &repodir).await {
 				error!("Failed to commit changes: {}", err);
 				server.destroy().await.expect("Failed to destroy the server");
