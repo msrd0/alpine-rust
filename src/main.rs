@@ -85,6 +85,10 @@ struct Args {
 	#[structopt(short = "u", long)]
 	docker_upcloud: bool,
 
+	/// Specify the amount of parallel jobs. Defaults to the number of CPUs on the system.
+	#[structopt(short = "j", long)]
+	jobs: Option<u16>,
+
 	/// Rust versions to build, e.g. 1.42 (optional)
 	#[structopt(name = "VERSION")]
 	versions: Vec<String>
@@ -205,7 +209,7 @@ async fn main() {
 	// determine the docker environment
 	debug!("Inspecting docker environment");
 	let repomount = server.repomount(&repodir);
-	let jobs = server.cores();
+	let jobs = args.jobs.unwrap_or_else(|| server.cores());
 	let cidr_v6 = server.cidr_v6();
 
 	// start our local caddy server
