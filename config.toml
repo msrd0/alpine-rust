@@ -8,8 +8,6 @@ pubkey = "alpine@msrd0.de-5fc3c0b2.rsa.pub"
 # NOTE: rust does not support compiling older compilers with newer ones. we need to always use some rust from an old
 # alpine version if the current stable is too new.
 
-# NOTE: these versions use the ArchLinux convention of starting pkgrel at 1, unlike AlpineLinux where it starts at 0
-
 # 1.40.0 - built using 1.39.0 from alpine-3.11
 [[versions]]
 rustminor = 40
@@ -115,17 +113,30 @@ a6df9e2d599806eeddbfb35f7dea976781533f63d369a765b8a304221281c9f9e642ff952978f69e
 fd39d2d86e56d4dd1ad3c044aec9f417b8fafedf954d3a53540bd138bec7632a450668e664b555ab632af084a000800e4fe4574abc8e6058299a4072115b272b  1.47.tar.gz
 """
 
-[channel.stable]
-_version = "1.48.0.20201119"
-channel = "stable"
+# 1.48.0 - built using 1.47.0 from this repo
+[[versions]]
 rustminor = 48
 rustpatch = 0
-pkgrel = 2
-date = "2020-11-19"
+pkgrel = 0
 llvmver = 10
 bootver = "1.47"
 bootsys = false
-sha512sums = '''
+sha512sums = """
 e28e5f0813cfd94fb92399a2d64aa19bdf0933b5fc768ea10da2a5b787c94bac6a5efb98b2c3702da3d1c46c6766b157df3727e5845b4b83a237b44ec45b27ba  rustc-1.48.0-src.tar.gz
 d34f57f021ac06bfa924ffb28d561453e829f01c092e35be5b40601c9a8ae20c5f3db76267e42c55207a3c187efa25261ea20755cc00adc1297a7bcf5aec4ad1  1.48.tar.gz
+"""
+
+[channel.stable]
+_version = "1.49.0.20201231"
+channel = "stable"
+rustminor = 49
+rustpatch = 0
+pkgrel = 1
+date = "2020-12-31"
+llvmver = 10
+bootver = "1.48"
+bootsys = false
+sha512sums = '''
+033aa9fb9b9a79055ee075c33c27ae40defe7430972057a6477829070b5f54f8fc5082d36f5c751a2fb4cdfcf0d83db7b879dee15a8c4229b517295d6b7b6896  rustc-1.49.0-src.tar.gz
+f3781cbb4e9e190df38c3fe7fa80ba69bf6f9dbafb158e0426dd4604f2f1ba794450679005a38d0f9f1dad0696e2f22b8b086b2d7d08a0f99bb4fd3b0f7ed5d8  1.49.tar.gz
 '''
