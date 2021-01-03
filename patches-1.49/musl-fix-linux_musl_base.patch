@@ -6,7 +6,11 @@ See https://github.com/rust-lang/rust/pull/40113
 
 --- a/compiler/rustc_target/src/spec/linux_musl_base.rs
 +++ b/compiler/rustc_target/src/spec/linux_musl_base.rs
-@@ -10,9 +10,5 @@
+@@ -1,13 +1,8 @@
+-use crate::spec::crt_objects::{self, CrtObjectsFallback};
+ use crate::spec::TargetOptions;
+ 
+ pub fn opts() -> TargetOptions {
      let mut base = super::linux_base::opts();
  
      base.env = "musl".to_string();
