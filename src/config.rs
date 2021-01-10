@@ -134,9 +134,11 @@ pub async fn update_config(config_path: &PathBuf) {
 			channel, pkgver, version_raw, date
 		);
 
-		let channel_needs_update = config["rust"][channel]["pkgver"].as_str() != Some(&pkgver)
-			|| config["rust"][channel]["date"].as_str() != Some(&date);
-		let version_needs_update = *channel == "stable" && config["rust"][&rustver]["pkgver"].as_str() != Some(&pkgver);
+		let channel_old_version = config["rust"][channel]["pkgver"].as_str().map(|it| it.to_string());
+		let channel_needs_update =
+			channel_old_version.as_deref() != Some(&pkgver) || config["rust"][channel]["date"].as_str() != Some(&date);
+		let version_old_version = config["rust"][&rustver]["pkgver"].as_str().map(|it| it.to_string());
+		let version_needs_update = *channel == "stable" && version_old_version.as_deref() != Some(&pkgver);
 
 		if !channel_needs_update && !version_needs_update {
 			continue;
@@ -156,11 +158,17 @@ pub async fn update_config(config_path: &PathBuf) {
 		sha512sums += &format!("{:x}  1.{}.tar.gz\n", patches, minor);
 
 		if channel_needs_update {
-			info!("Updating channel {} to {} ({})", channel, pkgver, date);
+			info!(
+				"Updating channel {} from {} to {} ({})",
+				channel,
+				channel_old_version.as_deref().unwrap_or("None"),
+				pkgver,
+				date
+			);
 
 			let mut tbl = table();
 			tbl.as_table_mut().unwrap().set_implicit(true);
-			tbl["pkgver"] = value(minor);
+			tbl["pkgver"] = value(pkgver.as_str());
 			tbl["pkgrel"] = value(0);
 			tbl["date"] = value(date);
 			tbl["llvmver"] = value(10);
@@ -172,16 +180,21 @@ pub async fn update_config(config_path: &PathBuf) {
 		}
 
 		if version_needs_update {
-			info!("Updating version {} to {}", rustver, pkgver);
+			info!(
+				"Updating version {} from {} to {}",
+				rustver,
+				version_old_version.as_deref().unwrap_or("None"),
+				pkgver
+			);
 
 			let mut tbl = table();
 			tbl.as_table_mut().unwrap().set_implicit(true);
-			tbl["pkgver"] = value(minor);
+			tbl["pkgver"] = value(pkgver.as_str());
 			tbl["pkgrel"] = value(0);
 			tbl["llvmver"] = value(10);
-			tbl["bootver"] = value(bootver);
+			tbl["bootver"] = value(bootver.as_str());
 			tbl["bootsys"] = value(false);
-			tbl["sha512sums"] = value(sha512sums);
+			tbl["sha512sums"] = value(sha512sums.as_str());
 			config["rust"][rustver] = tbl;
 			updated = true;
 		}
