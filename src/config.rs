@@ -1,10 +1,11 @@
 use crate::{CLIENT, GITHUB_TOKEN};
+use anyhow::bail;
 use chrono::NaiveDate;
 use futures_util::TryStreamExt;
 use regex::Regex;
 use serde::Deserialize;
 use sha2::{Digest, Sha512};
-use std::{collections::HashMap, future::Future, path::PathBuf, process::Command};
+use std::{collections::HashMap, fmt::LowerHex, future::Future, path::PathBuf, process::Command};
 use tokio::{
 	fs::File,
 	io::{AsyncReadExt, AsyncWriteExt}
@@ -53,6 +54,22 @@ fn get(url: &str) -> impl Future<Output = reqwest::Result<reqwest::Response>> {
 			"alpine-rust bot; https://github.com/msrd0/alpine-rust; CONTACT: https://matrix.to/#/@msrd0:msrd0.de"
 		)
 		.send()
+}
+
+async fn get_hash(url: &str) -> anyhow::Result<impl LowerHex> {
+	let res = get(url).await?;
+	if res.status().as_u16() != 200 {
+		bail!("{} returned non-200 status {}", url, res.status().as_u16());
+	}
+
+	Ok(res
+		.bytes_stream()
+		.try_fold(Sha512::new(), |mut hash, bytes| async move {
+			hash.update(bytes);
+			Ok(hash)
+		})
+		.await?
+		.finalize())
 }
 
 pub async fn update_config(config_path: &PathBuf) {
@@ -109,48 +126,37 @@ pub async fn update_config(config_path: &PathBuf) {
 		let minor: i64 = version_match["minor"].parse().unwrap();
 		let patch: i64 = version_match["patch"].parse().unwrap();
 		let date = channel_metadata["date"].as_str().unwrap();
+		let rustver = format!("{}.{}", major, minor);
 		let pkgver = format!("{}.{}.{}", major, minor, patch);
+		let bootver = format!("{}.{}", major, minor - 1);
 		info!(
 			"Channel {} is at version {} (raw: {} from {})",
 			channel, pkgver, version_raw, date
 		);
 
-		if config["rust"][channel]["pkgver"].as_str() != Some(&pkgver)
-			|| config["rust"][channel]["date"].as_str() != Some(&date)
-		{
-			info!("Updating channel {} to {} ({})", channel, pkgver, date);
+		let channel_needs_update = config["rust"][channel]["pkgver"].as_str() != Some(&pkgver)
+			|| config["rust"][channel]["date"].as_str() != Some(&date);
+		let version_needs_update = *channel == "stable" && config["rust"][&rustver]["pkgver"].as_str() != Some(&pkgver);
 
-			let mut sha512sums = "\n".to_owned();
-			let rust_src = get(&format!(
-				"https://static.rust-lang.org/dist/{}/rustc-{}-src.tar.gz",
-				date, pkgver
-			))
+		if !channel_needs_update && !version_needs_update {
+			continue;
+		}
+
+		let mut sha512sums = "\n".to_owned();
+		let rust_src_url = format!("https://static.rust-lang.org/dist/{}/rustc-{}-src.tar.gz", date, pkgver);
+		let rust_src = get_hash(&rust_src_url).await.expect("Failed to get sha512 sum of rust src");
+		sha512sums += &format!("{:x}  rustc-{}-src.tar.gz\n", rust_src, pkgver);
+		let patches_url = format!(
+			"https://github.com/msrd0/alpine-rust/archive/patches/{}.{}.tar.gz",
+			major, minor
+		);
+		let patches = get_hash(&patches_url)
 			.await
-			.expect("Failed to query rust src")
-			.bytes_stream()
-			.try_fold(Sha512::new(), |mut hash, bytes| async move {
-				hash.update(bytes);
-				Ok(hash)
-			})
-			.await
-			.expect("Failed to get sha512 sum of rust")
-			.finalize();
-			sha512sums += &format!("{:x}  rustc-{}-src.tar.gz\n", rust_src, pkgver);
-			let patches = get(&format!(
-				"https://github.com/msrd0/alpine-rust/archive/patches/{}.{}.tar.gz",
-				major, minor
-			))
-			.await
-			.expect("Failed to query rust src")
-			.bytes_stream()
-			.try_fold(Sha512::new(), |mut hash, bytes| async move {
-				hash.update(bytes);
-				Ok(hash)
-			})
-			.await
-			.expect("Failed to get sha512 sum of rust rust")
-			.finalize();
-			sha512sums += &format!("{:x}  1.{}.tar.gz\n", patches, minor);
+			.expect("Failed to get sha512 sum of rust patches");
+		sha512sums += &format!("{:x}  1.{}.tar.gz\n", patches, minor);
+
+		if channel_needs_update {
+			info!("Updating channel {} to {} ({})", channel, pkgver, date);
 
 			let mut tbl = table();
 			tbl.as_table_mut().unwrap().set_implicit(true);
@@ -158,10 +164,25 @@ pub async fn update_config(config_path: &PathBuf) {
 			tbl["pkgrel"] = value(0);
 			tbl["date"] = value(date);
 			tbl["llvmver"] = value(10);
-			tbl["bootver"] = value(format!("{}.{}", major, minor - 1));
+			tbl["bootver"] = value(bootver.as_str());
+			tbl["bootsys"] = value(false);
+			tbl["sha512sums"] = value(sha512sums.as_str());
+			config["channel"][channel] = tbl;
+			updated = true;
+		}
+
+		if version_needs_update {
+			info!("Updating version {} to {}", rustver, pkgver);
+
+			let mut tbl = table();
+			tbl.as_table_mut().unwrap().set_implicit(true);
+			tbl["pkgver"] = value(minor);
+			tbl["pkgrel"] = value(0);
+			tbl["llvmver"] = value(10);
+			tbl["bootver"] = value(bootver);
 			tbl["bootsys"] = value(false);
 			tbl["sha512sums"] = value(sha512sums);
-			config["channel"][channel] = tbl;
+			config["rust"][rustver] = tbl;
 			updated = true;
 		}
 	}
