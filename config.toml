@@ -131,7 +131,7 @@ sha512sums = '''
 '''
 
 [rust."1.49"]
-pkgver = 49
+pkgver = "1.49.0"
 pkgrel = 0
 llvmver = 10
 bootver = "1.48"
