@@ -1,13 +1,21 @@
 use crate::{CLIENT, GITHUB_TOKEN};
-use anyhow::bail;
+use anyhow::{bail, Context};
 use chrono::NaiveDate;
-use futures_util::TryStreamExt;
+use flate2::read::GzDecoder;
+use futures_util::{StreamExt, TryStreamExt};
 use regex::Regex;
 use serde::Deserialize;
 use sha2::{Digest, Sha512};
-use std::{collections::HashMap, fmt::LowerHex, future::Future, path::PathBuf, process::Command};
+use std::{
+	collections::HashMap,
+	fmt::LowerHex,
+	future::Future,
+	path::{Path, PathBuf},
+	process::Command
+};
+use tempfile::{tempdir, NamedTempFile};
 use tokio::{
-	fs::File,
+	fs::{self, File},
 	io::{AsyncReadExt, AsyncWriteExt}
 };
 use toml_edit::{table, value, Document};
@@ -41,12 +49,13 @@ pub struct Rust {
 
 lazy_static! {
 	static ref VERSION_REGEX: Regex = Regex::new(
-		r#"(?P<major>\d+)\.(?P<minor>\d+).(?P<patch>\d+)\s+\([0-9a-f]+\s+(?P<y>\d{4})-(?P<m>\d{2})-(?P<d>\d{2})\)"#
+		r#"(?P<major>\d+)\.(?P<minor>\d+).(?P<patch>\d+)(-(beta|nightly)\.\d+)?\s+\([0-9a-f]+\s+(?P<y>\d{4})-(?P<m>\d{2})-(?P<d>\d{2})\)"#
 	)
 	.unwrap();
 }
 
 fn get(url: &str) -> impl Future<Output = reqwest::Result<reqwest::Response>> {
+	info!("Downloading {}", url);
 	CLIENT
 		.get(url)
 		.header(
@@ -56,20 +65,68 @@ fn get(url: &str) -> impl Future<Output = reqwest::Result<reqwest::Response>> {
 		.send()
 }
 
-async fn get_hash(url: &str) -> anyhow::Result<impl LowerHex> {
+async fn get_hash_extract(url: &str, location: &Path) -> anyhow::Result<impl LowerHex> {
 	let res = get(url).await?;
 	if res.status().as_u16() != 200 {
 		bail!("{} returned non-200 status {}", url, res.status().as_u16());
 	}
 
-	Ok(res
+	// I don't care about the name but I need the path, not a file
+	let tempfile = NamedTempFile::new()?;
+
+	let (hash, _) = res
 		.bytes_stream()
-		.try_fold(Sha512::new(), |mut hash, bytes| async move {
-			hash.update(bytes);
-			Ok(hash)
-		})
-		.await?
-		.finalize())
+		.map_err(anyhow::Error::from)
+		.try_fold(
+			(Sha512::new(), File::create(tempfile.path()).await?),
+			|(mut hash, mut tempfile), bytes| async move {
+				hash.update(&bytes);
+				tempfile.write_all(&bytes).await?;
+				Ok((hash, tempfile))
+			}
+		)
+		.await?;
+
+	let mut file = std::fs::File::open(tempfile.path())?;
+	let mut archive = tar::Archive::new(GzDecoder::new(&mut file));
+	for entry in archive.entries().context("Unable to get archive entries")? {
+		entry
+			.context("Unable to get archive entry")?
+			.unpack_in(location)
+			.context("Unable to extract archive entry")?;
+	}
+
+	Ok(hash.finalize())
+}
+
+async fn test_patches(src_path: &Path, rustc_src_ver: &str, major: i64, minor: i64) -> anyhow::Result<()> {
+	let rust_src = src_path.join(format!("rustc-{}-src", rustc_src_ver));
+	let patches = src_path.join(format!(
+		"alpine-rust-patches-{major}.{minor}/patches-{major}.{minor}",
+		major = major,
+		minor = minor
+	));
+
+	let patch_files = fs::read_dir(patches).await?.collect::<Vec<_>>().await;
+	let mut patch_files = patch_files.into_iter().collect::<Result<Vec<_>, _>>()?;
+	if patch_files.is_empty() {
+		bail!("Missing patches for Rust {}.{}", major, minor);
+	}
+
+	patch_files.sort_by_key(|file| file.path());
+	for patch in patch_files {
+		let path = patch.path();
+		info!("Testing patch {} against rustc src ...", path.display());
+		let status = Command::new("patch")
+			.args(&["-N", "-p", "1", "-i", &path.to_string_lossy()])
+			.current_dir(&rust_src)
+			.status()?;
+		if !status.success() {
+			bail!("patching {} was unsuccessfull: exit code {:?}", path.display(), status.code())
+		}
+	}
+
+	Ok(())
 }
 
 pub async fn update_config(config_path: &PathBuf) {
@@ -91,7 +148,7 @@ pub async fn update_config(config_path: &PathBuf) {
 		config["channel"] = tbl;
 	}
 
-	for channel in &["stable"] {
+	for channel in &["stable", "beta"] {
 		let channel_metadata_buf = get(&format!("https://static.rust-lang.org/dist/channel-rust-{}.toml", channel))
 			.await
 			.expect("Failed to query channel")
@@ -128,7 +185,11 @@ pub async fn update_config(config_path: &PathBuf) {
 		let date = channel_metadata["date"].as_str().unwrap();
 		let rustver = format!("{}.{}", major, minor);
 		let pkgver = format!("{}.{}.{}", major, minor, patch);
-		let bootver = format!("{}.{}", major, minor - 1);
+		let bootver = match *channel {
+			"beta" => "stable".to_owned(),
+			"nightly" => "beta".to_owned(),
+			_ => format!("{}.{}", major, minor - 1)
+		};
 		info!(
 			"Channel {} is at version {} (raw: {} from {})",
 			channel, pkgver, version_raw, date
@@ -144,18 +205,35 @@ pub async fn update_config(config_path: &PathBuf) {
 			continue;
 		}
 
+		let src_dir = tempdir().expect("Failed to create tempdir");
+		let src_path = src_dir.path();
+
 		let mut sha512sums = "\n".to_owned();
-		let rust_src_url = format!("https://static.rust-lang.org/dist/{}/rustc-{}-src.tar.gz", date, pkgver);
-		let rust_src = get_hash(&rust_src_url).await.expect("Failed to get sha512 sum of rust src");
-		sha512sums += &format!("{:x}  rustc-{}-src.tar.gz\n", rust_src, pkgver);
+		let rustc_src_ver = match *channel {
+			"beta" => "beta",
+			"nightly" => "nightly",
+			_ => &pkgver
+		};
+		let rust_src_url = format!(
+			"https://static.rust-lang.org/dist/{}/rustc-{}-src.tar.gz",
+			date, rustc_src_ver
+		);
+		let rust_src = get_hash_extract(&rust_src_url, src_path)
+			.await
+			.expect("Failed to download rust src");
+		sha512sums += &format!("{:x}  rustc-{}-src.tar.gz\n", rust_src, rustc_src_ver);
 		let patches_url = format!(
 			"https://github.com/msrd0/alpine-rust/archive/patches/{}.{}.tar.gz",
 			major, minor
 		);
-		let patches = get_hash(&patches_url)
+		let patches = get_hash_extract(&patches_url, src_path)
 			.await
-			.expect("Failed to get sha512 sum of rust patches");
+			.expect("Failed to download rust patches");
 		sha512sums += &format!("{:x}  1.{}.tar.gz\n", patches, minor);
+
+		test_patches(src_path, rustc_src_ver, major, minor)
+			.await
+			.expect("Failed to apply patches");
 
 		if channel_needs_update {
 			info!(

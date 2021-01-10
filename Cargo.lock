@@ -32,6 +32,7 @@ dependencies = [
  "bollard",
  "chrono",
  "either",
+ "flate2",
  "futures-util",
  "indoc",
  "lazy_static",

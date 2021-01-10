@@ -80,11 +80,14 @@ subpackages="
 	cargo-$_channel-doc:_cargo_doc:noarch
 	clippy-$_channel:_clippy
 	"
+_rustcsrcver=$_pkgver
+[ "$channel" == "beta" ] && _rustcsrcver="beta"
+[ "$channel" == "nightly" ] && _rustcsrcver="nightly"
 source="
-	https://static.rust-lang.org/dist/${_date+$_date/}rustc-$_pkgver-src.tar.gz
+	https://static.rust-lang.org/dist/${_date+$_date/}rustc-$_rustcsrcver-src.tar.gz
 	https://github.com/msrd0/alpine-rust/archive/patches/$_rustver.tar.gz
 "
-builddir="$srcdir/rustc-$_pkgver-src"
+builddir="$srcdir/rustc-$_rustcsrcver-src"
 
 # secfixes:
 #   1.34.2-r0:
