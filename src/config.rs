@@ -253,7 +253,7 @@ pub async fn update_config(config_path: &PathBuf) {
 			tbl["bootver"] = value(bootver.as_str());
 			tbl["bootsys"] = value(false);
 			tbl["sha512sums"] = value(sha512sums.as_str());
-			config["channel"][channel] = tbl;
+			config["rust"][channel] = tbl;
 			updated = true;
 		}
 
