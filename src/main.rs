@@ -131,7 +131,7 @@ async fn main() {
 	repo::download(&repodir).await.expect("Failed to download repo");
 
 	// create the repo dir if it does not exist yet
-	let x86_64 = repodir.join(format!("{}/alpine-rust/x86_64", config.alpine));
+	let x86_64 = repodir.join(format!("{}/alpine-rust/x86_64", config.alpine.version));
 	debug!("Creating directory {}", x86_64.display());
 	if let Err(err) = fs::create_dir_all(&x86_64).await {
 		warn!("Unable to create {}: {}", x86_64.display(), err);

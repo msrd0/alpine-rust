@@ -32,7 +32,7 @@ pub async fn up_to_date(repodir: &Path, config: &Config, ver: &Version) -> bool 
 	};
 	let path = format!(
 		"{}/alpine-rust/x86_64/{}-{}-r{}.apk",
-		config.alpine, pkgname, pkgver, ver.pkgrel
+		config.alpine.version, pkgname, pkgver, ver.pkgrel
 	);
 	info!("Checking if {} is up to date ...", path);
 	match fs::metadata(repodir.join(path)).await {
@@ -95,7 +95,13 @@ async fn docker_build_abuild(docker: &Docker, tag: &str, config: &Config, ver: &
 	// create the context tar for docker build
 	let apkbuild: String = ver.apkbuild().render()?;
 	let dockerfile = config.rust_dockerfile_abuild(ver, jobs).render()?;
-	let tar = build_tar(Some(&apkbuild), &dockerfile, &config.pubkey, Some(&config.privkey)).await?;
+	let tar = build_tar(
+		Some(&apkbuild),
+		&dockerfile,
+		&config.alpine.pubkey,
+		Some(&config.alpine.privkey)
+	)
+	.await?;
 
 	// build the docker image
 	build_image(
@@ -168,7 +174,7 @@ async fn docker_build_dockerfile(docker: &Docker, tag: &str, dockerfile: &str, c
 	info!("Building Docker image {}", tag);
 
 	// create the context tar for docker build
-	let tar = build_tar(None, dockerfile, &config.pubkey, None).await?;
+	let tar = build_tar(None, dockerfile, &config.alpine.pubkey, None).await?;
 
 	// build the docker image
 	build_image(

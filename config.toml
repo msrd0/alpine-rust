@@ -1,4 +1,5 @@
-alpine = "3.12"
+[alpine]
+version = "3.12"
 privkey = "alpine@msrd0.de-5fc3c0b2.rsa"
 pubkey = "alpine@msrd0.de-5fc3c0b2.rsa.pub"
 

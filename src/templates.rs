@@ -22,8 +22,8 @@ impl Config {
 		}
 
 		IndexHtmlTemplate {
-			alpine: &self.alpine,
-			pubkey: &self.pubkey
+			alpine: &self.alpine.version,
+			pubkey: &self.alpine.pubkey
 		}
 	}
 
@@ -34,7 +34,9 @@ impl Config {
 			alpine: &'t str
 		}
 
-		Caddyfile { alpine: &self.alpine }
+		Caddyfile {
+			alpine: &self.alpine.version
+		}
 	}
 
 	pub fn caddy_dockerfile<'a>(&'a self) -> impl Template + 'a {
@@ -57,9 +59,9 @@ impl Config {
 		}
 
 		DockerfileAbuild {
-			alpine: &self.alpine,
-			pubkey: &self.pubkey,
-			privkey: &self.privkey,
+			alpine: &self.alpine.version,
+			pubkey: &self.alpine.pubkey,
+			privkey: &self.alpine.privkey,
 			sysver: ver.sysver.as_deref(),
 			jobs
 		}
@@ -76,8 +78,8 @@ impl Config {
 		}
 
 		DockerfileDefault {
-			alpine: &self.alpine,
-			pubkey: &self.pubkey,
+			alpine: &self.alpine.version,
+			pubkey: &self.alpine.pubkey,
 			channel: ver.channel.as_deref(),
 			rustver: Rustver {
 				rustminor: ver.rustminor
@@ -96,8 +98,8 @@ impl Config {
 		}
 
 		DockerfileMinimal {
-			alpine: &self.alpine,
-			pubkey: &self.pubkey,
+			alpine: &self.alpine.version,
+			pubkey: &self.alpine.pubkey,
 			channel: ver.channel.as_deref(),
 			rustver: Rustver {
 				rustminor: ver.rustminor
@@ -115,8 +117,8 @@ impl Config {
 		}
 
 		DockerfileTest {
-			alpine: &self.alpine,
-			pubkey: &self.pubkey,
+			alpine: &self.alpine.version,
+			pubkey: &self.alpine.pubkey,
 			cidr_v6
 		}
 	}

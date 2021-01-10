@@ -12,13 +12,18 @@ use toml_edit::{table, value, Document};
 
 #[derive(Deserialize)]
 pub struct Config {
-	pub alpine: String,
-	pub pubkey: String,
-	pub privkey: String,
+	pub alpine: Alpine,
 	#[serde(default)]
 	pub versions: Vec<Version>,
 	#[serde(default)]
 	pub channel: HashMap<String, Version>
+}
+
+#[derive(Deserialize)]
+pub struct Alpine {
+	pub version: String,
+	pub pubkey: String,
+	pub privkey: String
 }
 
 #[derive(Deserialize)]

@@ -44,7 +44,7 @@ impl Server for LocalServer {
 	}
 
 	async fn upload_repo_changes(&self, config: &Config, repodir: &Path) -> anyhow::Result<()> {
-		let dir = repodir.join(format!("{}/alpine-rust/x86_64", config.alpine));
+		let dir = repodir.join(format!("{}/alpine-rust/x86_64", config.alpine.version));
 
 		let mut res: anyhow::Result<()> = Ok(());
 		let mut entries = fs::read_dir(&dir).await?;
@@ -87,7 +87,7 @@ impl Server for LocalServer {
 			};
 
 			if etag != Some(hash) {
-				let key = format!("{}/alpine-rust/x86_64/{}", config.alpine, file_name.to_string_lossy());
+				let key = format!("{}/alpine-rust/x86_64/{}", config.alpine.version, file_name.to_string_lossy());
 				if let Err(err) = repo::upload(&path, &key).await {
 					error!("Error uploading {}: {}", path.display(), err);
 					res = Err(err);

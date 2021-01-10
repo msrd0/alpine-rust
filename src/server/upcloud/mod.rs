@@ -71,7 +71,7 @@ impl UpcloudServer {
 		// generate some keys for docker to use with TLS
 		let keys = gen_docker_keys(ip, &domain).await?;
 
-		let repo_dir = format!("/var/lib/alpine-rust/{}/alpine-rust/x86_64", config.alpine);
+		let repo_dir = format!("/var/lib/alpine-rust/{}/alpine-rust/x86_64", config.alpine.version);
 		Ok(UpcloudServer {
 			ip: ip.to_owned(),
 			domain,
@@ -128,9 +128,9 @@ impl Server for UpcloudServer {
 		run(&mut sess, "systemctl enable --now docker-tlsverify")?;
 
 		// upload the repository content
-		let dir = format!("/var/lib/alpine-rust/{}/alpine-rust/x86_64", config.alpine);
+		let dir = format!("/var/lib/alpine-rust/{}/alpine-rust/x86_64", config.alpine.version);
 		run(&mut sess, &format!("mkdir -p {}", dir))?;
-		let mut entries = fs::read_dir(repodir.join(format!("{}/alpine-rust/x86_64", config.alpine))).await?;
+		let mut entries = fs::read_dir(repodir.join(format!("{}/alpine-rust/x86_64", config.alpine.version))).await?;
 		while let Some(entry) = entries.next().await {
 			let entry = entry?;
 			upload(
@@ -141,7 +141,7 @@ impl Server for UpcloudServer {
 			.await?;
 		}
 		run(&mut sess, "chmod 777 $(find /var/lib/alpine-rust -type d)")?;
-		run(&mut sess, &format!("test ! -e /var/lib/alpine-rust/{}/alpine-rust/x86_64/APKINDEX.tar.gz || chmod 666 $(find /var/lib/alpine-rust -type f)", config.alpine))?;
+		run(&mut sess, &format!("test ! -e /var/lib/alpine-rust/{}/alpine-rust/x86_64/APKINDEX.tar.gz || chmod 666 $(find /var/lib/alpine-rust -type f)", config.alpine.version))?;
 
 		// index the repository
 		let repo_index = index(&mut sess, &dir)?;
@@ -180,7 +180,7 @@ impl Server for UpcloudServer {
 		let mut sess = connect(&self.domain, &self.password).await?;
 
 		// pull the current index
-		let dir = format!("/var/lib/alpine-rust/{}/alpine-rust/x86_64", config.alpine);
+		let dir = format!("/var/lib/alpine-rust/{}/alpine-rust/x86_64", config.alpine.version);
 		let new_index = index(&mut sess, &dir)?;
 
 		// get all updated files - the build will never delete files
@@ -197,7 +197,7 @@ impl Server for UpcloudServer {
 		// download those files and upload to the repo
 		let mut res: anyhow::Result<()> = Ok(());
 		for file in &updated {
-			let path = format!("{}/alpine-rust/x86_64/{}", config.alpine, file);
+			let path = format!("{}/alpine-rust/x86_64/{}", config.alpine.version, file);
 			let dest = repodir.join(&path);
 			download(&mut sess, &format!("{}/{}", dir, file), &dest).await?;
 			if let Err(err) = repo::upload(&dest, &path).await {

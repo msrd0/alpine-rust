@@ -9,10 +9,12 @@ use tokio::{
 pub(super) async fn update(config: &Config, repodir: &Path, upload_metadata: bool) {
 	info!("Updating repository metadata");
 
-	let path = repodir.join(&config.pubkey);
-	fs::copy(&config.pubkey, &path).await.expect("Unable to copy pubkey");
+	let path = repodir.join(&config.alpine.pubkey);
+	fs::copy(&config.alpine.pubkey, &path).await.expect("Unable to copy pubkey");
 	if upload_metadata {
-		repo::upload(&path, &config.pubkey).await.expect("Failed to upload pubkey");
+		repo::upload(&path, &config.alpine.pubkey)
+			.await
+			.expect("Failed to upload pubkey");
 	}
 
 	let path = repodir.join("index.html");
