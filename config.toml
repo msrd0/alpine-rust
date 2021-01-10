@@ -140,3 +140,11 @@ sha512sums = '''
 033aa9fb9b9a79055ee075c33c27ae40defe7430972057a6477829070b5f54f8fc5082d36f5c751a2fb4cdfcf0d83db7b879dee15a8c4229b517295d6b7b6896  rustc-1.49.0-src.tar.gz
 536264d678d6350ed2c723fb0b5e2e7245d379e0f03426d4fbdce4392a08aa1881a1706fdba2513a603a60a4348e2b545adf0c9b8c33e849af282796a8d143f7  1.49.tar.gz
 '''
+
+[rust.beta]
+pkgver = "1.50.0"
+pkgrel = 0
+date = "2021-01-06"
+llvmver = 10
+bootver = "stable"
+bootsys = false
