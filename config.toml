@@ -10,9 +10,8 @@ pubkey = "alpine@msrd0.de-5fc3c0b2.rsa.pub"
 # alpine version if the current stable is too new.
 
 # 1.40.0 - built using 1.39.0 from alpine-3.11
-[[versions]]
-rustminor = 40
-rustpatch = 0
+[rust.'1.40']
+pkgver = "1.40.0"
 pkgrel = 1
 llvmver = 9
 bootver = "1.39.0"
@@ -24,9 +23,8 @@ sha512sums = """
 """
 
 # 1.41.1 - built using 1.40.0 from this repo
-[[versions]]
-rustminor = 41
-rustpatch = 1
+[rust.'1.41']
+pkgver = "1.41.1"
 pkgrel = 1
 llvmver = 9
 bootver = "1.40"
@@ -37,9 +35,8 @@ fffb26550d5375fd4029c61ce945c0bd9ab4b6909a6fef96a1d424d7f562149780d712c55ca7c19e
 """
 
 # 1.42.0 - built using 1.41.1 from this repo
-[[versions]]
-rustminor = 42
-rustpatch = 0
+[rust.'1.42']
+pkgver = "1.42.0"
 pkgrel = 1
 llvmver = 10
 bootver = "1.41"
@@ -50,9 +47,8 @@ sha512sums = """
 """
 
 # 1.43.1 - built using 1.42.0 from this repo
-[[versions]]
-rustminor = 43
-rustpatch = 1
+[rust.'1.43']
+pkgver = "1.43.1"
 pkgrel = 1
 llvmver = 10
 bootver = "1.42"
@@ -63,9 +59,8 @@ d432e908a29732516cb1784a24df9f82c20852bb0cf4d0120208b0ff542c4b0d7ad0d6d78f826dd4
 """
 
 # 1.44.1 - built using 1.43.1 from this repo
-[[versions]]
-rustminor = 44
-rustpatch = 1
+[rust.'1.44']
+pkgver = "1.44.1"
 pkgrel = 1
 llvmver = 10
 bootver = "1.43"
@@ -76,12 +71,11 @@ f6b719a2a63aa96a192a098f58ff1042251cee96a1ff742ecb09d5b88fe5be79bc7023f118e0a6c0
 """
 
 # 1.45.2 - built using 1.44.0 from alpine-3.12 (latest)
-[[versions]]
-rustminor = 45
-rustpatch = 2
+[rust.'1.45']
+pkgver = "1.45.2"
 pkgrel = 1
 llvmver = 10
-bootver = "1.44.0-r0"
+bootver = "1.44.0"
 bootsys = true
 sha512sums = """
 5996f899d3677dd73487561d95b0bee6d6e33f7087f40806fa8176d685de9e6d42974344c855402a9fc634c0e91e0df6e33fcb3194b3e4296e1a1cb49defb98e  rustc-1.45.2-src.tar.gz
@@ -89,9 +83,8 @@ sha512sums = """
 """
 
 # 1.46.0 - built using 1.45.2 from this repo
-[[versions]]
-rustminor = 46
-rustpatch = 0
+[rust.'1.46']
+pkgver = "1.46.0"
 pkgrel = 1
 llvmver = 10
 bootver = "1.45"
@@ -102,9 +95,8 @@ a0788aa9db4b9bffd097846709ccfac2527cf8070d5c3a87d935481ac11e1d29daa3fc03a649a11a
 """
 
 # 1.47.0 - built using 1.46.0 from this repo
-[[versions]]
-rustminor = 47
-rustpatch = 0
+[rust.'1.47']
+pkgver = "1.47.0"
 pkgrel = 1
 llvmver = 10
 bootver = "1.46"
@@ -115,9 +107,8 @@ fd39d2d86e56d4dd1ad3c044aec9f417b8fafedf954d3a53540bd138bec7632a450668e664b555ab
 """
 
 # 1.48.0 - built using 1.47.0 from this repo
-[[versions]]
-rustminor = 48
-rustpatch = 0
+[rust.'1.48']
+pkgver = "1.48.0"
 pkgrel = 0
 llvmver = 10
 bootver = "1.47"
@@ -127,11 +118,8 @@ e28e5f0813cfd94fb92399a2d64aa19bdf0933b5fc768ea10da2a5b787c94bac6a5efb98b2c3702d
 d34f57f021ac06bfa924ffb28d561453e829f01c092e35be5b40601c9a8ae20c5f3db76267e42c55207a3c187efa25261ea20755cc00adc1297a7bcf5aec4ad1  1.48.tar.gz
 """
 
-[channel.stable]
-_version = "1.49.0.20201231"
-channel = "stable"
-rustminor = 49
-rustpatch = 0
+[rust.stable]
+pkgver = "1.49.0"
 pkgrel = 1
 date = "2020-12-31"
 llvmver = 10

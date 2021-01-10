@@ -89,9 +89,9 @@ struct Args {
 	#[structopt(short = "j", long)]
 	jobs: Option<u16>,
 
-	/// Rust versions to build, e.g. 1.42 (optional)
-	#[structopt(name = "VERSION")]
-	versions: Vec<String>
+	/// Rust versions/channels to build, e.g. 1.42 or stable (optional)
+	#[structopt(name = "CHANNEL")]
+	channels: Vec<String>
 }
 
 #[tokio::main]
@@ -147,18 +147,15 @@ async fn main() {
 	// search for versions that need to be updated
 	debug!("Determining packages that needs updates");
 	let pkg_updates;
-	let config_ver_iter = config.versions.iter().chain(config.channel.values());
-	if args.versions.is_empty() {
+	let config_ver_iter = config.rust.keys().map(|channel| channel.as_str());
+	if args.channels.is_empty() {
 		pkg_updates = stream::iter(config_ver_iter)
 			.filter(|ver| build::rust::up_to_date(&repodir, &config, ver).map(|up_to_date| !up_to_date))
 			.collect::<Vec<_>>()
 			.await;
 	} else {
 		pkg_updates = config_ver_iter
-			.filter(|ver| match ver.channel.as_ref() {
-				Some(channel) => args.versions.contains(channel),
-				None => args.versions.contains(&format!("1.{}", ver.rustminor))
-			})
+			.filter(|channel| args.channels.iter().any(|ch| ch == channel))
 			.collect::<Vec<_>>()
 	}
 
@@ -167,14 +164,7 @@ async fn main() {
 		info!("Everything is up to date");
 		return;
 	}
-	let pkg_updates_str = pkg_updates
-		.iter()
-		.map(|ver| match ver.channel.clone() {
-			Some(channel) => channel,
-			None => format!("1.{}", ver.rustminor)
-		})
-		.collect::<Vec<_>>()
-		.join(", ");
+	let pkg_updates_str = pkg_updates.join(", ");
 	info!("The following rust versions will be updated: {}", pkg_updates_str);
 
 	// connect to docker - create a server
@@ -229,15 +219,12 @@ async fn main() {
 	};
 
 	// update packages
-	for ver in pkg_updates {
+	for channel in pkg_updates {
 		// build the package
 		if args.skip_rust_packages {
-			match ver.channel.as_deref() {
-				Some(channel) => info!("Skipping rust packages for {}", channel),
-				None => info!("Skipping rust packages for 1.{}", ver.rustminor)
-			}
+			info!("Skipping rust packages for {}", channel)
 		} else {
-			if let Err(err) = build::rust::build_package(&repomount, &docker, &config, ver, jobs).await {
+			if let Err(err) = build::rust::build_package(&repomount, &docker, &config, channel, jobs).await {
 				error!("Failed to build package: {}", err);
 				server.destroy().await.expect("Failed to destroy the server");
 
@@ -246,7 +233,7 @@ async fn main() {
 		}
 
 		// test the package
-		if let Err(err) = build::rust::test_package(docker.clone(), &cidr_v6, &config, ver).await {
+		if let Err(err) = build::rust::test_package(docker.clone(), &cidr_v6, &config, channel).await {
 			error!("Testing package failed: {}", err);
 			// TODO maybe upload the package somewhere for manual inspection
 			server.destroy().await.expect("Failed to destroy the server");
@@ -265,9 +252,9 @@ async fn main() {
 
 		// build the docker images
 		if args.skip_rust_docker {
-			info!("Skipping rust docker images for 1.{}", ver.rustminor);
+			info!("Skipping rust docker images for {}", channel);
 		} else {
-			if let Err(err) = build::rust::build_and_upload_docker(&docker, &config, ver, args.upload_docker).await {
+			if let Err(err) = build::rust::build_and_upload_docker(&docker, &config, channel, args.upload_docker).await {
 				error!("Failed to build docker images: {}", err);
 				server.destroy().await.expect("Failed to destroy the server");
 				exit(1);

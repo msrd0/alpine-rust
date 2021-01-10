@@ -1,6 +1,6 @@
 use crate::{
 	docker::{build_image, run_container_to_completion, tar_header, IPv6CIDR},
-	Config, Version, GITHUB_TOKEN
+	Config, GITHUB_TOKEN
 };
 use anyhow::anyhow;
 use askama::Template;
@@ -21,18 +21,16 @@ use tokio::{
 
 const DOCKER_IMAGE: &str = "ghcr.io/msrd0/alpine-rust";
 
-pub async fn up_to_date(repodir: &Path, config: &Config, ver: &Version) -> bool {
-	let pkgname = match ver.channel.as_ref() {
-		Some(channel) => format!("rust-{}", channel),
-		None => format!("rust-1.{}", ver.rustminor)
-	};
-	let pkgver = match ver.date.as_ref() {
-		Some(date) => format!("1.{}.{}.{}", ver.rustminor, ver.rustpatch, date.replace("-", "")),
-		None => format!("1.{}.{}", ver.rustminor, ver.rustpatch)
+pub async fn up_to_date(repodir: &Path, config: &Config, channel: &str) -> bool {
+	let rust = &config.rust[channel];
+	let pkgname = format!("rust-{}", channel);
+	let pkgver = match rust.date.as_ref() {
+		Some(date) => format!("{}.{}", rust.pkgver, date.format("%Y%m%d")),
+		None => format!("{}", rust.pkgver)
 	};
 	let path = format!(
 		"{}/alpine-rust/x86_64/{}-{}-r{}.apk",
-		config.alpine.version, pkgname, pkgver, ver.pkgrel
+		config.alpine.version, pkgname, pkgver, rust.pkgrel
 	);
 	info!("Checking if {} is up to date ...", path);
 	match fs::metadata(repodir.join(path)).await {
@@ -89,12 +87,12 @@ async fn build_tar(
 	Ok(tar_buf)
 }
 
-async fn docker_build_abuild(docker: &Docker, tag: &str, config: &Config, ver: &Version, jobs: u16) -> anyhow::Result<()> {
+async fn docker_build_abuild(docker: &Docker, tag: &str, config: &Config, channel: &str, jobs: u16) -> anyhow::Result<()> {
 	info!("Building Docker image {}", tag);
 
 	// create the context tar for docker build
-	let apkbuild: String = ver.apkbuild().render()?;
-	let dockerfile = config.rust_dockerfile_abuild(ver, jobs).render()?;
+	let apkbuild: String = config.rust_apkbuild(channel).render()?;
+	let dockerfile = config.rust_dockerfile_abuild(channel, jobs).render()?;
 	let tar = build_tar(
 		Some(&apkbuild),
 		&dockerfile,
@@ -219,13 +217,13 @@ pub async fn build_package(
 	repomount: &str,
 	docker: &Docker,
 	config: &Config,
-	ver: &Version,
+	channel: &str,
 	jobs: u16
 ) -> anyhow::Result<()> {
-	info!("Building Rust 1.{}.{}", ver.rustminor, ver.rustpatch);
+	info!("Building Rust {}", channel);
 
-	let img = format!("alpine-rust-builder-1.{}", ver.rustminor);
-	docker_build_abuild(docker, &img, config, ver, jobs).await?;
+	let img = format!("alpine-rust-builder-{}", channel);
+	docker_build_abuild(docker, &img, config, channel, jobs).await?;
 	docker_run_abuild(docker, &img, repomount).await?;
 
 	Ok(())
@@ -235,17 +233,16 @@ pub async fn test_package(
 	docker: Arc<Docker>,
 	cidr_v6: &IPv6CIDR<String>,
 	config: &Config,
-	ver: &Version
+	channel: &str
 ) -> anyhow::Result<()> {
 	info!("Testing build packages ...");
 
-	let tag = format!("alpine-rust-test-1.{}", ver.rustminor);
+	let tag = format!("alpine-rust-test-{}", channel);
 
 	let dockerfile = config.rust_dockerfile_test(cidr_v6).render()?;
 	docker_build_dockerfile(&docker, &tag, &dockerfile, config).await?;
 
 	// TODO is this the best way to get all packages?
-	let channel = ver.channel.clone().unwrap_or_else(|| format!("1.{}", ver.rustminor));
 	let packages = [
 		"cargo-{}",
 		"cargo-{}-bash-completions",
@@ -347,28 +344,23 @@ pub async fn test_package(
 pub async fn build_and_upload_docker(
 	docker: &Docker,
 	config: &Config,
-	ver: &Version,
+	channel: &str,
 	upload_docker: bool
 ) -> anyhow::Result<()> {
-	let channel = ver.channel.clone().unwrap_or_else(|| format!("1.{}", ver.rustminor));
-	let tag = match channel.as_str() {
-		"stable" => "latest",
-		channel => channel
-	};
-	let minimal_tag = match channel.as_str() {
-		"stable" => "minimal".to_owned(),
-		channel => format!("{}-minimal", channel)
+	let (tag, minimal_tag) = match channel {
+		"stable" => ("latest", "minimal".to_owned()),
+		channel => (channel, format!("{}-minimal", channel))
 	};
 
 	let img = format!("{}:{}", DOCKER_IMAGE, minimal_tag);
-	let dockerfile = config.rust_dockerfile_minimal(ver).render()?;
+	let dockerfile = config.rust_dockerfile_minimal(channel).render()?;
 	docker_build_dockerfile(docker, &img, &dockerfile, config).await?;
 	if upload_docker {
 		docker_push(docker, &img).await?;
 	}
 
 	let img = format!("{}:{}", DOCKER_IMAGE, tag);
-	let dockerfile = config.rust_dockerfile_default(ver).render()?;
+	let dockerfile = config.rust_dockerfile_default(channel).render()?;
 	docker_build_dockerfile(docker, &img, &dockerfile, config).await?;
 	if upload_docker {
 		docker_push(docker, &img).await?;

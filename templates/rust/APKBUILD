@@ -6,18 +6,15 @@
 # Contributor: Shiz <hi@shiz.me>
 # Contributor: Jeizsm <jeizsm@gmail.com>
 # Maintainer: Dominic Meiser <alpine@msrd0.de>
-_rustver=1.{{ rustminor }}
-{% if channel.is_some() -%}
-_channel={{ channel.as_deref().unwrap() }}
-{% else -%}
-_channel=$_rustver
-{% endif -%}
+
+_channel={{ channel }}
 {% if date.is_some() -%}
 _date={{ date.as_deref().unwrap() }}
 {% endif -%}
 pkgname=rust-$_channel
-_pkgver=$_rustver.{{ rustpatch }}
+_pkgver={{ pkgver }}
 pkgver=$_pkgver${_date+.${_date//-/}}
+_rustver=$(printf $_pkgver | sed -E 's,\.[0-9+]$,,')
 _llvmver={{ llvmver }}
 _bootver={{ bootver }}
 pkgrel={{ pkgrel }}
@@ -48,10 +45,11 @@ makedepends_build="
 "
 # FIXME: not including cargo/rust dependencies because we're using packages from alpine-{{ sysver.as_deref().unwrap() }}
 	{%- else %}
-	{% if bootsys %}rust=$_bootver{% else %}rust-$_bootver{% endif %}
-	{% if bootsys %}cargo=$_bootver{% else %}cargo-$_bootver{% endif %}
+	{% if bootsys %}rust=>$_bootver{% else %}rust-$_bootver{% endif %}
+	{% if bootsys %}cargo=>$_bootver{% else %}cargo-$_bootver{% endif %}
 "
 	{%- endif %}
+{%- if false %}"{% endif %}
 
 makedepends_host="
 	curl-dev
@@ -300,7 +298,7 @@ _cargo_bashcomp() {
 	license="Apache-2.0 MIT"
 	depends=""
 	provides="cargo-bashcomp=$pkgver"
-	install_if="cargo-$_rustver=$pkgver-r$pkgrel bash-completion"
+	install_if="cargo-$_channel=$pkgver-r$pkgrel bash-completion"
 
 	cd "$pkgdir"
 	_mv etc/bash_completion.d/cargo \
@@ -313,7 +311,7 @@ _cargo_zshcomp() {
 	license="Apache-2.0 MIT"
 	depends=""
 	provides="cargo-zshcomp=$pkgver"
-	install_if="cargo-$_rustver=$pkgver-r$pkgrel zsh"
+	install_if="cargo-$_channel=$pkgver-r$pkgrel zsh"
 
 	cd "$pkgdir"
 	_mv usr/share/zsh/site-functions/_cargo \
@@ -325,7 +323,7 @@ _cargo_doc() {
 	pkgdesc="The Rust package manager (documentation)"
 	license="Apache-2.0 MIT"
 	provides="cargo-doc=$pkgver"
-	install_if="docs cargo-$_rustver=$pkgver-r$pkgrel"
+	install_if="docs cargo-$_channel=$pkgver-r$pkgrel"
 
 	# XXX: This is hackish!
 	cd "$pkgdir"/../$pkgname-doc

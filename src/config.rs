@@ -1,4 +1,5 @@
 use crate::{CLIENT, GITHUB_TOKEN};
+use chrono::NaiveDate;
 use futures_util::TryStreamExt;
 use regex::Regex;
 use serde::Deserialize;
@@ -14,9 +15,7 @@ use toml_edit::{table, value, Document};
 pub struct Config {
 	pub alpine: Alpine,
 	#[serde(default)]
-	pub versions: Vec<Version>,
-	#[serde(default)]
-	pub channel: HashMap<String, Version>
+	pub rust: HashMap<String, Rust>
 }
 
 #[derive(Deserialize)]
@@ -27,12 +26,10 @@ pub struct Alpine {
 }
 
 #[derive(Deserialize)]
-pub struct Version {
-	pub channel: Option<String>,
-	pub rustminor: u32,
-	pub rustpatch: u32,
+pub struct Rust {
+	pub pkgver: String,
 	pub pkgrel: u32,
-	pub date: Option<String>,
+	pub date: Option<NaiveDate>,
 	pub llvmver: u32,
 	pub bootver: String,
 	pub bootsys: bool,
@@ -42,8 +39,10 @@ pub struct Version {
 }
 
 lazy_static! {
-	static ref VERSION_REGEX: Regex =
-		Regex::new(r#"1\.(?P<minor>\d+).(?P<patch>\d+)\s+\([0-9a-f]+\s+(?P<y>\d{4})-(?P<m>\d{2})-(?P<d>\d{2})\)"#).unwrap();
+	static ref VERSION_REGEX: Regex = Regex::new(
+		r#"(?P<major>\d+)\.(?P<minor>\d+).(?P<patch>\d+)\s+\([0-9a-f]+\s+(?P<y>\d{4})-(?P<m>\d{2})-(?P<d>\d{2})\)"#
+	)
+	.unwrap();
 }
 
 fn get(url: &str) -> impl Future<Output = reqwest::Result<reqwest::Response>> {
@@ -106,23 +105,25 @@ pub async fn update_config(config_path: &PathBuf) {
 
 		let version_raw = channel_metadata["pkg"][rust_name]["version"].as_str().unwrap();
 		let version_match = VERSION_REGEX.captures_iter(version_raw).next().unwrap();
+		let major: i64 = version_match["major"].parse().unwrap();
 		let minor: i64 = version_match["minor"].parse().unwrap();
 		let patch: i64 = version_match["patch"].parse().unwrap();
-		let date_raw = channel_metadata["date"].as_str().unwrap();
-		let date_condensed = date_raw.replace("-", "");
-		let version = format!("1.{}.{}.{}", minor, patch, date_condensed);
+		let date = channel_metadata["date"].as_str().unwrap();
+		let pkgver = format!("{}.{}.{}", major, minor, patch);
 		info!(
 			"Channel {} is at version {} (raw: {} from {})",
-			channel, version, version_raw, date_raw
+			channel, pkgver, version_raw, date
 		);
 
-		if config["channel"][channel]["_version"].as_str() != Some(&version) {
-			info!("Updating channel {} to {}", channel, version);
+		if config["rust"][channel]["pkgver"].as_str() != Some(&pkgver)
+			|| config["rust"][channel]["date"].as_str() != Some(&date)
+		{
+			info!("Updating channel {} to {} ({})", channel, pkgver, date);
 
 			let mut sha512sums = "\n".to_owned();
 			let rust_src = get(&format!(
-				"https://static.rust-lang.org/dist/{}/rustc-1.{}.{}-src.tar.gz",
-				date_raw, minor, patch
+				"https://static.rust-lang.org/dist/{}/rustc-{}-src.tar.gz",
+				date, pkgver
 			))
 			.await
 			.expect("Failed to query rust src")
@@ -132,12 +133,12 @@ pub async fn update_config(config_path: &PathBuf) {
 				Ok(hash)
 			})
 			.await
-			.expect("Failed to get sha512 sum of rust rust")
+			.expect("Failed to get sha512 sum of rust")
 			.finalize();
-			sha512sums += &format!("{:x}  rustc-1.{}.{}-src.tar.gz\n", rust_src, minor, patch);
+			sha512sums += &format!("{:x}  rustc-{}-src.tar.gz\n", rust_src, pkgver);
 			let patches = get(&format!(
-				"https://github.com/msrd0/alpine-rust/archive/patches/1.{}.tar.gz",
-				minor
+				"https://github.com/msrd0/alpine-rust/archive/patches/{}.{}.tar.gz",
+				major, minor
 			))
 			.await
 			.expect("Failed to query rust src")
@@ -153,14 +154,11 @@ pub async fn update_config(config_path: &PathBuf) {
 
 			let mut tbl = table();
 			tbl.as_table_mut().unwrap().set_implicit(true);
-			tbl["_version"] = value(version.as_ref());
-			tbl["channel"] = value(*channel);
-			tbl["rustminor"] = value(minor);
-			tbl["rustpatch"] = value(patch);
-			tbl["pkgrel"] = value(1);
-			tbl["date"] = value(date_raw);
+			tbl["pkgver"] = value(minor);
+			tbl["pkgrel"] = value(0);
+			tbl["date"] = value(date);
 			tbl["llvmver"] = value(10);
-			tbl["bootver"] = value(format!("1.{}", minor - 1));
+			tbl["bootver"] = value(format!("{}.{}", major, minor - 1));
 			tbl["bootsys"] = value(false);
 			tbl["sha512sums"] = value(sha512sums);
 			config["channel"][channel] = tbl;

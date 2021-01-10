@@ -1,5 +1,6 @@
 use crate::{config::*, docker::IPv6CIDR};
 use askama::Template;
+use chrono::NaiveDate;
 use std::fmt::{self, Display};
 
 struct Rustver {
@@ -47,7 +48,7 @@ impl Config {
 		Dockerfile
 	}
 
-	pub fn rust_dockerfile_abuild<'a>(&'a self, ver: &'a Version, jobs: u16) -> impl Template + 'a {
+	pub fn rust_dockerfile_abuild<'a>(&'a self, channel: &str, jobs: u16) -> impl Template + 'a {
 		#[derive(Template)]
 		#[template(path = "rust/abuild.Dockerfile")]
 		struct DockerfileAbuild<'t> {
@@ -62,48 +63,40 @@ impl Config {
 			alpine: &self.alpine.version,
 			pubkey: &self.alpine.pubkey,
 			privkey: &self.alpine.privkey,
-			sysver: ver.sysver.as_deref(),
+			sysver: self.rust[channel].sysver.as_deref(),
 			jobs
 		}
 	}
 
-	pub fn rust_dockerfile_default<'a>(&'a self, ver: &'a Version) -> impl Template + 'a {
+	pub fn rust_dockerfile_default<'a>(&'a self, channel: &'a str) -> impl Template + 'a {
 		#[derive(Template)]
 		#[template(path = "rust/default.Dockerfile")]
 		struct DockerfileDefault<'t> {
 			alpine: &'t str,
 			pubkey: &'t str,
-			channel: Option<&'t str>,
-			rustver: Rustver
+			channel: &'t str
 		}
 
 		DockerfileDefault {
 			alpine: &self.alpine.version,
 			pubkey: &self.alpine.pubkey,
-			channel: ver.channel.as_deref(),
-			rustver: Rustver {
-				rustminor: ver.rustminor
-			}
+			channel
 		}
 	}
 
-	pub fn rust_dockerfile_minimal<'a>(&'a self, ver: &'a Version) -> impl Template + 'a {
+	pub fn rust_dockerfile_minimal<'a>(&'a self, channel: &'a str) -> impl Template + 'a {
 		#[derive(Template)]
 		#[template(path = "rust/minimal.Dockerfile")]
 		struct DockerfileMinimal<'t> {
 			alpine: &'t str,
 			pubkey: &'t str,
-			channel: Option<&'t str>,
-			rustver: Rustver
+			channel: &'t str
 		}
 
 		DockerfileMinimal {
 			alpine: &self.alpine.version,
 			pubkey: &self.alpine.pubkey,
-			channel: ver.channel.as_deref(),
-			rustver: Rustver {
-				rustminor: ver.rustminor
-			}
+			channel
 		}
 	}
 
@@ -122,18 +115,15 @@ impl Config {
 			cidr_v6
 		}
 	}
-}
 
-impl Version {
-	pub fn apkbuild<'a>(&'a self) -> impl Template + 'a {
+	pub fn rust_apkbuild<'a>(&'a self, channel: &'a str) -> impl Template + 'a {
 		#[derive(Template)]
 		#[template(path = "rust/APKBUILD")]
 		struct ApkbuildTemplate<'t> {
-			channel: Option<&'t str>,
-			rustminor: u32,
-			rustpatch: u32,
+			channel: &'t str,
+			pkgver: &'t str,
 			pkgrel: u32,
-			date: Option<&'t str>,
+			date: Option<&'t NaiveDate>,
 			llvmver: u32,
 			bootver: &'t str,
 			bootsys: bool,
@@ -142,18 +132,18 @@ impl Version {
 			sha512sums: &'t str
 		}
 
+		let rust: &'a Rust = &self.rust[channel];
 		ApkbuildTemplate {
-			channel: self.channel.as_deref(),
-			rustminor: self.rustminor,
-			rustpatch: self.rustpatch,
-			pkgrel: self.pkgrel,
-			date: self.date.as_deref(),
-			llvmver: self.llvmver,
-			bootver: &self.bootver,
-			bootsys: self.bootsys,
-			sysver: self.sysver.as_deref(),
-			python: self.python.as_deref(),
-			sha512sums: &self.sha512sums
+			channel,
+			pkgver: &rust.pkgver,
+			pkgrel: rust.pkgrel,
+			date: rust.date.as_ref(),
+			llvmver: rust.llvmver,
+			bootver: &rust.bootver,
+			bootsys: rust.bootsys,
+			sysver: rust.sysver.as_deref(),
+			python: rust.python.as_deref(),
+			sha512sums: &rust.sha512sums
 		}
 	}
 }
