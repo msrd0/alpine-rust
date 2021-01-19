@@ -1,0 +1,18 @@
+# -*- eval: (cargo-minor-mode 1) -*-
+
+[workspace]
+members = [".", "macros"]
+
+[package]
+name = "simple-compiler-test"
+version = "0.0.0"
+edition = "2018"
+publish = false
+
+[dependencies]
+macros = { path = "macros" }
+
+[patch.crates-io]
+proc-macro2 = { path = "vendor/proc-macro2-1.0.24" }
+quote = { path = "vendor/quote-1.0.8" }
+unicode-xid = { path = "vendor/unicode-xid-0.2.1" }

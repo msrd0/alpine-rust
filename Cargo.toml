@@ -10,6 +10,9 @@ license = "GPL-3.0"
 # do not publish to crates.io
 publish = false
 
+[build-dependencies]
+tar = "0.4"
+
 [dependencies]
 # utility crates
 anyhow = "1.0"
@@ -17,7 +20,6 @@ base64 = "0.13"
 chrono = { version = "0.4", features = ["serde"] }
 either = "1.6"
 flate2 = "1.0"
-indoc = "1.0"
 lazy_static = "1.4"
 num_cpus = "1.13"
 rand = "0.7"

@@ -47,6 +47,7 @@ pub async fn up_to_date(repodir: &Path, config: &Config, channel: &str) -> bool 
 async fn build_tar(
 	apkbuild: Option<&str>,
 	dockerfile: &str,
+	include_compiler_test: bool,
 	pubkey: &str,
 	privkey: Option<&str>
 ) -> anyhow::Result<Vec<u8>> {
@@ -64,6 +65,13 @@ async fn build_tar(
 	let bytes = dockerfile.as_bytes();
 	let header = tar_header("Dockerfile", bytes.len());
 	tar.append(&header, Cursor::new(bytes))?;
+
+	// include the compiler test if desired
+	if include_compiler_test {
+		const BYTES: &[u8] = include_bytes!(env!("SIMPLE_COMPILER_TEST"));
+		let header = tar_header("simple_compiler_test.tar", BYTES.len());
+		tar.append(&header, Cursor::new(BYTES))?;
+	}
 
 	// copy the public key
 	let mut file = File::open(pubkey).await?;
@@ -96,6 +104,7 @@ async fn docker_build_abuild(docker: &Docker, tag: &str, config: &Config, channe
 	let tar = build_tar(
 		Some(&apkbuild),
 		&dockerfile,
+		false,
 		&config.alpine.pubkey,
 		Some(&config.alpine.privkey)
 	)
@@ -168,11 +177,17 @@ async fn docker_run_test(docker: Arc<Docker>, img: String, cmd: String) -> anyho
 	run_container_to_completion(&docker, &container.id).await
 }
 
-async fn docker_build_dockerfile(docker: &Docker, tag: &str, dockerfile: &str, config: &Config) -> anyhow::Result<()> {
+async fn docker_build_dockerfile(
+	docker: &Docker,
+	tag: &str,
+	include_compiler_test: bool,
+	dockerfile: &str,
+	config: &Config
+) -> anyhow::Result<()> {
 	info!("Building Docker image {}", tag);
 
 	// create the context tar for docker build
-	let tar = build_tar(None, dockerfile, &config.alpine.pubkey, None).await?;
+	let tar = build_tar(None, dockerfile, include_compiler_test, &config.alpine.pubkey, None).await?;
 
 	// build the docker image
 	build_image(
@@ -240,7 +255,7 @@ pub async fn test_package(
 	let tag = format!("alpine-rust-test-{}", channel);
 
 	let dockerfile = config.rust_dockerfile_test(cidr_v6).render()?;
-	docker_build_dockerfile(&docker, &tag, &dockerfile, config).await?;
+	docker_build_dockerfile(&docker, &tag, true, &dockerfile, config).await?;
 
 	// TODO is this the best way to get all packages?
 	let packages = [
@@ -280,44 +295,12 @@ pub async fn test_package(
 	tests.push((task, err));
 
 	// and finally, test a small rust program that uses derive macros
-	let cargo = indoc!(
-		r#"
-		[package]
-		name = "alpine-rust-test"
-		version = "0.0.0"
-		authors = ["Tux", "The Rust Crab"]
-		edition = "2018"
-		publish = false
-		
-		[dependencies]
-		serde = { version = "1.0", features = ["derive"] }
-		serde_json = "1.0"
-	"#
-	);
-	let main = indoc!(
-		r#"
-		use serde::Serialize;
-		use serde_json::{json, to_value};
-		
-		#[derive(Serialize)]
-		struct Foo {
-			foo: u8
-		}
-		
-		fn main() {
-			let expected = json!({ "foo": 42 });
-			let actual = to_value(&Foo { foo: 42 }).unwrap();
-			assert_eq!(actual, expected);
-		}
-	"#
-	);
 	let cmd = vec![
-		format!("apk add cargo-{channel} clang lld rust-{channel}", channel = channel),
+		format!("apk add cargo-{channel} rust-{channel}", channel = channel),
 		"mkdir -p /tmp/alpine-rust-test/src".to_owned(),
 		"cd /tmp/alpine-rust-test".to_owned(),
-		format!("echo {} | base64 -d >Cargo.toml", base64::encode(cargo)),
-		format!("echo {} | base64 -d >src/main.rs", base64::encode(main)),
-		"RUSTFLAGS=\"-C linker=clang -C link-arg=-fuse-ld=lld\" cargo run".to_owned(),
+		"tar xf /opt/simple_compiler_test.tar".to_owned(),
+		"cargo test --offline --lib".to_owned(),
 	]
 	.join(" && ");
 	let task = spawn(docker_run_test(docker.clone(), tag.clone(), cmd));
@@ -354,14 +337,14 @@ pub async fn build_and_upload_docker(
 
 	let img = format!("{}:{}", DOCKER_IMAGE, minimal_tag);
 	let dockerfile = config.rust_dockerfile_minimal(channel).render()?;
-	docker_build_dockerfile(docker, &img, &dockerfile, config).await?;
+	docker_build_dockerfile(docker, &img, false, &dockerfile, config).await?;
 	if upload_docker {
 		docker_push(docker, &img).await?;
 	}
 
 	let img = format!("{}:{}", DOCKER_IMAGE, tag);
 	let dockerfile = config.rust_dockerfile_default(channel).render()?;
-	docker_build_dockerfile(docker, &img, &dockerfile, config).await?;
+	docker_build_dockerfile(docker, &img, false, &dockerfile, config).await?;
 	if upload_docker {
 		docker_push(docker, &img).await?;
 	}
