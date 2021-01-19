@@ -144,11 +144,11 @@ sha512sums = '''
 [rust.beta]
 pkgver = "1.50.0"
 pkgrel = 0
-date = "2021-01-06"
+date = "2021-01-15"
 llvmver = 10
 bootver = "stable"
 bootsys = false
 sha512sums = '''
-c641a21295d3e7539cd4bef329685cee9f6d39f5f71c0e0b29cc58649193ca148cbe81183d895eb377ad166457f25bd9b798715c4908b1826f9f3cdd37ad9264  rustc-beta-src.tar.gz
+85e0afd21aedb640b34240be8c0733aea9fa5c546f28bc64956c73c2d528df6937863bf326fcf73d3aa189c112dc05155537187d9b7812770ec096d16eda725b  rustc-beta-src.tar.gz
 bc786b3f4ea2a1b41daa94c7e380981477063c869e6f0dd902a1f391b1bc0d78cdd26043617d93c9fb6d2e681958e65afdae5f9ea842c9fea5a65ffcaa21b627  1.50.tar.gz
 '''
