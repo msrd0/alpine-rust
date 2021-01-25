@@ -2,7 +2,7 @@ use crate::{CLIENT, GITHUB_TOKEN};
 use anyhow::{bail, Context};
 use chrono::NaiveDate;
 use flate2::read::GzDecoder;
-use futures_util::{StreamExt, TryStreamExt};
+use futures_util::StreamExt;
 use regex::Regex;
 use serde::Deserialize;
 use sha2::{Digest, Sha512};
@@ -65,27 +65,38 @@ fn get(url: &str) -> impl Future<Output = reqwest::Result<reqwest::Response>> {
 		.send()
 }
 
-async fn get_hash_extract(url: &str, location: &Path) -> anyhow::Result<impl LowerHex> {
-	let res = get(url).await?;
-	if res.status().as_u16() != 200 {
-		bail!("{} returned non-200 status {}", url, res.status().as_u16());
-	}
-
-	// I don't care about the name but I need the path, not a file
+async fn get_hash_extract(cache_dir: &PathBuf, url: &str, location: &Path) -> anyhow::Result<impl LowerHex> {
+	let mut hash = Sha512::new();
 	let tempfile = NamedTempFile::new()?;
+	let mut file = File::create(tempfile.path()).await?;
 
-	let (hash, _) = res
-		.bytes_stream()
-		.map_err(anyhow::Error::from)
-		.try_fold(
-			(Sha512::new(), File::create(tempfile.path()).await?),
-			|(mut hash, mut tempfile), bytes| async move {
-				hash.update(&bytes);
-				tempfile.write_all(&bytes).await?;
-				Ok((hash, tempfile))
+	if let Ok(mut cache) = File::open(cache_dir.join(base64::encode(url))).await {
+		info!("Using cache for {}", url);
+		let mut buf = [0u8; 8192];
+		loop {
+			let read = cache.read(&mut buf).await?;
+			if read == 0 {
+				break;
 			}
-		)
-		.await?;
+			hash.update(&buf[..read]);
+			file.write_all(&buf[..read]).await?;
+		}
+	} else {
+		let res = get(url).await?;
+		if res.status().as_u16() != 200 {
+			bail!("{} returned non-200 status {}", url, res.status().as_u16());
+		}
+
+		let mut cache = File::create(cache_dir.join(base64::encode(url))).await?;
+		let mut bytes = res.bytes_stream();
+		while let Some(buf) = bytes.next().await {
+			let buf = buf?;
+			hash.update(&buf);
+			file.write_all(&buf).await?;
+			cache.write_all(&buf).await?;
+		}
+	}
+	drop(file);
 
 	let mut file = std::fs::File::open(tempfile.path())?;
 	let mut archive = tar::Archive::new(GzDecoder::new(&mut file));
@@ -129,7 +140,11 @@ async fn test_patches(src_path: &Path, rustc_src_ver: &str, major: i64, minor: i
 	Ok(())
 }
 
-pub async fn update_config(config_path: &PathBuf) {
+pub async fn update_config(config_path: &PathBuf, cache_dir: Option<&PathBuf>) {
+	let default_cache_dir = dirs_next::cache_dir().unwrap().join("alpine-rust");
+	let cache_dir = cache_dir.unwrap_or(&default_cache_dir);
+	fs::create_dir_all(cache_dir).await.expect("Failed to create cache dir");
+
 	let config_path = config_path.canonicalize().unwrap();
 	info!("Reading {}", config_path.display());
 	let mut config_file = File::open(&config_path).await.expect("Unable to find config file");
@@ -218,7 +233,7 @@ pub async fn update_config(config_path: &PathBuf) {
 			"https://static.rust-lang.org/dist/{}/rustc-{}-src.tar.gz",
 			date, rustc_src_ver
 		);
-		let rust_src = get_hash_extract(&rust_src_url, src_path)
+		let rust_src = get_hash_extract(cache_dir, &rust_src_url, src_path)
 			.await
 			.expect("Failed to download rust src");
 		sha512sums += &format!("{:x}  rustc-{}-src.tar.gz\n", rust_src, rustc_src_ver);
@@ -226,7 +241,7 @@ pub async fn update_config(config_path: &PathBuf) {
 			"https://github.com/msrd0/alpine-rust/archive/patches/{}.{}.tar.gz",
 			major, minor
 		);
-		let patches = get_hash_extract(&patches_url, src_path)
+		let patches = get_hash_extract(cache_dir, &patches_url, src_path)
 			.await
 			.expect("Failed to download rust patches");
 		sha512sums += &format!("{:x}  1.{}.tar.gz\n", patches, minor);

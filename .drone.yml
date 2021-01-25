@@ -161,7 +161,7 @@ steps:
     commands:
       - apk add --no-cache ca-certificates git libgcc libgit2 libssh2 libressl
       - mkdir -p target/repo
-      - ./target/release/alpine-rust -c -u -d -m -p -r target/repo -v --ignore beta
+      - ./target/release/alpine-rust -c -u -d -m -p -r target/repo --cache target/cache -v --ignore beta
   
   - name: rebuild-cache
     image: meltwater/drone-cache:v1

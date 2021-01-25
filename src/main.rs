@@ -52,6 +52,10 @@ struct Args {
 	#[structopt(short, long)]
 	repodir: Option<PathBuf>,
 
+	/// Use custom cache directory
+	#[structopt(long)]
+	cache: Option<PathBuf>,
+
 	/// Skip updating metadata
 	#[structopt(long)]
 	skip_metadata: bool,
@@ -110,7 +114,7 @@ async fn main() {
 	debug!("Arguments: {:?}", args);
 
 	if args.update_config {
-		config::update_config(&args.config).await;
+		config::update_config(&args.config, args.cache.as_ref()).await;
 	}
 
 	info!("Reading config.toml");
