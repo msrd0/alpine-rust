@@ -23,7 +23,7 @@ flate2 = "1.0"
 itertools = "0.10"
 lazy_static = "1.4"
 num_cpus = "1.13"
-rand = "0.7"
+rand = "0.8"
 regex = "1.4"
 tempfile = "3.1"
 
@@ -49,7 +49,7 @@ tar = "0.4"
 
 # communication with the repository
 md5 = "0.7"
-rust-s3 = { version = "0.26", features = ["rustls-tls"], default-features = false }
+rust-s3 = { version = "0.27.0-beta8", features = ["with-tokio", "tokio-rustls-tls"], default-features = false }
 
 # config file
 serde = { version = "1.0", features = ["derive"] }
@@ -57,6 +57,9 @@ serde_json = "1.0"
 sha2 = "0.9"
 toml = "0.5"
 toml_edit = "0.2"
+
+# force http to version 0.2.2 until update to tokio/bytes 1.0
+http = "=0.2.2"
 
 # flate2/miniz is too slow on debug builds
 [profile.dev.package.flate2]
