@@ -19,6 +19,7 @@ use tokio::{fs::File, io::AsyncWriteExt};
 fn serial_number() -> anyhow::Result<Asn1Integer> {
 	let hex = thread_rng()
 		.sample_iter(Alphanumeric)
+		.map(char::from)
 		.filter(|char| char.is_digit(16))
 		.take(40)
 		.collect::<String>();

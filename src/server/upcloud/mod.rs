@@ -52,7 +52,7 @@ pub struct UpcloudServer {
 impl UpcloudServer {
 	pub async fn create(config: &Config) -> anyhow::Result<Self> {
 		let rng = thread_rng();
-		let hostname = rng.sample_iter(Alphanumeric).take(10).collect::<String>();
+		let hostname = rng.sample_iter(Alphanumeric).take(10).map(char::from).collect::<String>();
 		let title = format!("alpine-rust-{}", hostname);
 
 		info!("Creating Server {}", title);
