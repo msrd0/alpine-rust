@@ -20,6 +20,7 @@ base64 = "0.13"
 chrono = { version = "0.4", features = ["serde"] }
 either = "1.6"
 flate2 = "1.0"
+itertools = "0.10"
 lazy_static = "1.4"
 num_cpus = "1.13"
 rand = "0.7"

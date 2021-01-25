@@ -7,8 +7,9 @@ extern crate log;
 
 use either::Either;
 use futures_util::{stream, FutureExt, StreamExt};
+use itertools::Itertools;
 use log::LevelFilter;
-use std::{env, path::PathBuf, process::exit, sync::Arc};
+use std::{collections::BTreeSet, env, path::PathBuf, process::exit, sync::Arc};
 use structopt::StructOpt;
 use tempfile::tempdir;
 use tokio::{
@@ -33,7 +34,7 @@ lazy_static! {
 }
 
 /// Utility to compile Rust packages for Alpine Linux.
-#[derive(StructOpt)]
+#[derive(Debug, StructOpt)]
 struct Args {
 	/// Verbose mode (-v, -vv, -vvv)
 	#[structopt(short, long, parse(from_occurrences))]
@@ -87,6 +88,10 @@ struct Args {
 	#[structopt(short = "j", long)]
 	jobs: Option<u16>,
 
+	/// Rust versions/channels to exclude, e.g. 1.42 or stable (optional)
+	#[structopt(long)]
+	ignore: Vec<String>,
+
 	/// Rust versions/channels to build, e.g. 1.42 or stable (optional)
 	#[structopt(name = "CHANNEL")]
 	channels: Vec<String>
@@ -102,6 +107,7 @@ async fn main() {
 			_ => LevelFilter::Trace
 		})
 		.init();
+	debug!("Arguments: {:?}", args);
 
 	if args.update_config {
 		config::update_config(&args.config).await;
@@ -144,25 +150,27 @@ async fn main() {
 
 	// search for versions that need to be updated
 	debug!("Determining packages that needs updates");
-	let pkg_updates;
 	let config_ver_iter = config.rust.keys().map(|channel| channel.as_str());
-	if args.channels.is_empty() {
-		pkg_updates = stream::iter(config_ver_iter)
+	let mut pkg_updates = if args.channels.is_empty() {
+		stream::iter(config_ver_iter)
 			.filter(|ver| build::rust::up_to_date(&repodir, &config, ver).map(|up_to_date| !up_to_date))
-			.collect::<Vec<_>>()
-			.await;
+			.collect::<BTreeSet<_>>()
+			.await
 	} else {
-		pkg_updates = config_ver_iter
+		config_ver_iter
 			.filter(|channel| args.channels.iter().any(|ch| ch == channel))
-			.collect::<Vec<_>>()
-	}
+			.collect::<BTreeSet<_>>()
+	};
+	args.ignore.iter().for_each(|channel| {
+		pkg_updates.remove(channel.as_str());
+	});
 
 	// if everything is up to date, simply exit
 	if pkg_updates.is_empty() {
 		info!("Everything is up to date");
 		return;
 	}
-	let pkg_updates_str = pkg_updates.join(", ");
+	let pkg_updates_str = pkg_updates.iter().join(", ");
 	info!("The following rust versions will be updated: {}", pkg_updates_str);
 
 	// connect to docker - create a server

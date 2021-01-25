@@ -295,12 +295,12 @@ pub async fn test_package(
 	tests.push((task, err));
 
 	// and finally, test a small rust program that uses derive macros
-	let cmd = vec![
+	let cmd = [
 		format!("apk add cargo-{channel} rust-{channel}", channel = channel),
 		"mkdir -p /tmp/alpine-rust-test/src".to_owned(),
 		"cd /tmp/alpine-rust-test".to_owned(),
 		"tar xf /opt/simple_compiler_test.tar".to_owned(),
-		"cargo test --offline --lib".to_owned(),
+		"cargo test --offline --lib".to_owned()
 	]
 	.join(" && ");
 	let task = spawn(docker_run_test(docker.clone(), tag.clone(), cmd));
