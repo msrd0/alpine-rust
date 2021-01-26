@@ -318,7 +318,7 @@ _cargo_zshcomp() {
 
 	cd "$pkgdir"
 	_mv usr/share/zsh/site-functions/_cargo \
-		"$subpkgdir"/usr/share/zsh/site-functions/_cargo
+		"$subpkgdir"/usr/share/zsh/site-functions/
 	rmdir -p usr/share/zsh/site-functions 2>/dev/null || true
 }
 
