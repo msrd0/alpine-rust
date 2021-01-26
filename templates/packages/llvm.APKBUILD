@@ -88,6 +88,12 @@ prepare() {
 	case "$CARCH" in
 		x86) rm -v test/Object/macho-invalid.test;;
 	esac
+	
+	# This test fails in llvm 11: https://bugs.llvm.org/show_bug.cgi?id=48313
+	if [ "$_majorver" == 11 ]
+	then
+		rm -v test/ExecutionEngine/Interpreter/intrinsics.ll
+	fi
 }
 
 build() {
