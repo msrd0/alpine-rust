@@ -48,6 +48,42 @@ impl Config {
 		Dockerfile
 	}
 
+	pub fn packages_dockerfile_abuild<'a>(&'a self, jobs: u16) -> impl Template + 'a {
+		#[derive(Template)]
+		#[template(path = "packages/abuild.Dockerfile")]
+		struct DockerfileAbuild<'t> {
+			alpine: &'t str,
+			pubkey: &'t str,
+			privkey: &'t str,
+			jobs: u16
+		}
+
+		DockerfileAbuild {
+			alpine: &self.alpine.version,
+			pubkey: &self.alpine.pubkey,
+			privkey: &self.alpine.privkey,
+			jobs
+		}
+	}
+
+	pub fn package_llvm_apkbuild<'a>(&'a self, llvm: &'a PackageLLVM) -> impl Template + 'a {
+		#[derive(Template)]
+		#[template(path = "packages/llvm.APKBUILD")]
+		struct LLVMApkbuild<'t> {
+			pkgver: &'t str,
+			pkgrel: u32,
+			paxmark: bool,
+			sha512sum: &'t str
+		}
+
+		LLVMApkbuild {
+			pkgver: &llvm.pkgver,
+			pkgrel: llvm.pkgrel,
+			paxmark: llvm.paxmark,
+			sha512sum: &llvm.sha512sum
+		}
+	}
+
 	pub fn rust_dockerfile_abuild<'a>(&'a self, channel: &str, jobs: u16) -> impl Template + 'a {
 		#[derive(Template)]
 		#[template(path = "rust/abuild.Dockerfile")]

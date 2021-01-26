@@ -24,7 +24,24 @@ use toml_edit::{table, value, Document};
 pub struct Config {
 	pub alpine: Alpine,
 	#[serde(default)]
+	pub packages: Packages,
+	#[serde(default)]
 	pub rust: HashMap<String, Rust>
+}
+
+#[derive(Default, Deserialize)]
+pub struct Packages {
+	#[serde(default)]
+	pub llvm: Vec<PackageLLVM>
+}
+
+#[derive(Deserialize)]
+pub struct PackageLLVM {
+	pub pkgver: String,
+	pub pkgrel: u32,
+	#[serde(default)]
+	pub paxmark: bool,
+	pub sha512sum: String
 }
 
 #[derive(Deserialize)]

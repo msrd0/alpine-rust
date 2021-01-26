@@ -85,7 +85,7 @@ _rustcsrcver=$_pkgver
 [ "$_channel" == "nightly" ] && _rustcsrcver="nightly"
 source="
 	https://static.rust-lang.org/dist/${_date+$_date/}rustc-$_rustcsrcver-src.tar.gz
-	https://github.com/msrd0/alpine-rust/archive/patches/$_rustver.tar.gz
+	rustc-patches-$_rustver.tar.gz::https://github.com/msrd0/alpine-rust/archive/patches/$_rustver.tar.gz
 "
 builddir="$srcdir/rustc-$_rustcsrcver-src"
 
@@ -108,10 +108,6 @@ _sharedir="usr/share/rust"
 ldpath="/$_rlibdir"
 
 export RUST_BACKTRACE=1
-# Don't use system libgit2 for now...
-# https://github.com/rust-lang/rust/issues/63476
-# Convince libgit2-sys to use the distro libgit2.
-#export LIBGIT2_SYS_USE_PKG_CONFIG=1
 
 # rust checksums files in vendor/, but we have to patch a few files...
 _clear_vendor_checksums() {

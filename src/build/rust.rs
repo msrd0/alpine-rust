@@ -1,18 +1,13 @@
+use super::docker_run_abuild;
 use crate::{
 	docker::{build_image, run_container_to_completion, tar_header, IPv6CIDR},
 	Config, GITHUB_TOKEN
 };
 use anyhow::anyhow;
 use askama::Template;
-use bollard::{
-	auth::DockerCredentials,
-	container,
-	image::BuildImageOptions,
-	models::{HostConfig, Mount, MountTypeEnum},
-	Docker
-};
+use bollard::{auth::DockerCredentials, container, image::BuildImageOptions, Docker};
 use futures_util::StreamExt;
-use std::{collections::HashMap, io::Cursor, path::Path, process::exit, sync::Arc};
+use std::{io::Cursor, path::Path, process::exit, sync::Arc};
 use tokio::{
 	fs::{self, File},
 	io::{self, AsyncReadExt},
@@ -81,7 +76,7 @@ async fn build_tar(
 	tar.append(&header, Cursor::new(bytes))?;
 
 	if let Some(privkey) = privkey {
-		// copy the public key
+		// copy the private key
 		let mut file = File::open(privkey).await?;
 		let mut bytes = Vec::<u8>::new();
 		file.read_to_end(&mut bytes).await?;
@@ -123,38 +118,6 @@ async fn docker_build_abuild(docker: &Docker, tag: &str, config: &Config, channe
 	.await?;
 	info!("Built Docker image {}", tag);
 	Ok(())
-}
-
-async fn docker_run_abuild(docker: &Docker, img: &str, repomount: &str) -> anyhow::Result<()> {
-	info!("Creating container for {}", img);
-
-	// create the container
-	let mut volumes: HashMap<&str, HashMap<(), ()>> = HashMap::new();
-	volumes.insert("/repo", Default::default());
-	let mut mounts: Vec<Mount> = Vec::new();
-	mounts.push(Mount {
-		target: Some("/repo".to_string()),
-		source: Some(repomount.to_string()),
-		typ: Some(MountTypeEnum::BIND),
-		read_only: Some(false),
-		..Default::default()
-	});
-	let container = docker
-		.create_container::<String, &str>(None, container::Config {
-			attach_stdout: Some(true),
-			attach_stderr: Some(true),
-			image: Some(img),
-			volumes: Some(volumes),
-			host_config: Some(HostConfig {
-				mounts: Some(mounts),
-				..Default::default()
-			}),
-			..Default::default()
-		})
-		.await?;
-	info!("Created container {}", container.id);
-
-	run_container_to_completion(docker, &container.id).await
 }
 
 async fn docker_run_test(docker: Arc<Docker>, img: String, cmd: String) -> anyhow::Result<()> {

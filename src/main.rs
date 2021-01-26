@@ -5,11 +5,21 @@ extern crate lazy_static;
 #[macro_use]
 extern crate log;
 
+use bollard::Docker;
 use either::Either;
 use futures_util::{stream, FutureExt, StreamExt};
 use itertools::Itertools;
 use log::LevelFilter;
-use std::{collections::BTreeSet, env, path::PathBuf, process::exit, sync::Arc};
+use std::{
+	borrow::Cow,
+	cmp::Ordering,
+	collections::BTreeSet,
+	env,
+	future::Future,
+	path::{Path, PathBuf},
+	process::exit,
+	sync::Arc
+};
 use structopt::StructOpt;
 use tempfile::tempdir;
 use tokio::{
@@ -25,6 +35,7 @@ mod repo;
 mod server;
 mod templates;
 
+use build::packages::Package;
 use config::*;
 use server::{local::LocalServer, upcloud::UpcloudServer, Server};
 
@@ -101,6 +112,76 @@ struct Args {
 	channels: Vec<String>
 }
 
+enum Packagelike<'a> {
+	LLVM(&'a PackageLLVM),
+	Rust { channel: &'a str }
+}
+
+impl<'a> PartialEq for Packagelike<'a> {
+	fn eq(&self, other: &Self) -> bool {
+		match self {
+			Self::LLVM(llvm) => match other {
+				Self::LLVM(other_llvm) => llvm.pkgver == other_llvm.pkgver,
+				_ => false
+			},
+			Self::Rust { channel } => match other {
+				Self::Rust { channel: other_channel } => channel == other_channel,
+				_ => false
+			}
+		}
+	}
+}
+
+impl<'a> Eq for Packagelike<'a> {}
+
+impl<'a> PartialOrd for Packagelike<'a> {
+	fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+		Some(self.cmp(other))
+	}
+}
+
+impl<'a> Ord for Packagelike<'a> {
+	fn cmp(&self, other: &Self) -> Ordering {
+		match self {
+			Self::LLVM(llvm) => match other {
+				Self::LLVM(other_llvm) => llvm.pkgver.cmp(&other_llvm.pkgver),
+				Self::Rust { .. } => Ordering::Less
+			},
+			Self::Rust { channel } => match other {
+				Self::LLVM(_) => Ordering::Greater,
+				Self::Rust { channel: other_channel } => channel.cmp(other_channel)
+			}
+		}
+	}
+}
+
+impl<'a> Packagelike<'a> {
+	fn name(&'a self) -> Cow<'a, str> {
+		match self {
+			Self::LLVM(llvm) => llvm.pkgname().into(),
+			Self::Rust { channel } => (*channel).into()
+		}
+	}
+
+	fn is_up_to_date<'b, 'fut>(&self, repodir: &'b Path, config: &'b Config) -> impl Future<Output = bool> + 'fut
+	where
+		'a: 'fut,
+		'b: 'fut
+	{
+		match self {
+			Self::LLVM(llvm) => build::packages::up_to_date(repodir, config, *llvm).boxed(),
+			Self::Rust { channel } => build::rust::up_to_date(repodir, config, channel).boxed()
+		}
+	}
+
+	async fn build_package(&self, repomount: &str, docker: &Docker, config: &Config, jobs: u16) -> anyhow::Result<()> {
+		match self {
+			Self::LLVM(llvm) => build::packages::build_package(repomount, docker, config, *llvm, jobs).await,
+			Self::Rust { channel } => build::rust::build_package(repomount, docker, config, channel, jobs).await
+		}
+	}
+}
+
 #[tokio::main]
 async fn main() {
 	let args = Args::from_args();
@@ -154,27 +235,40 @@ async fn main() {
 
 	// search for versions that need to be updated
 	debug!("Determining packages that needs updates");
-	let config_ver_iter = config.rust.keys().map(|channel| channel.as_str());
+	let config_ver_iter = config
+		.rust
+		.keys()
+		.map(|channel| Packagelike::Rust {
+			channel: channel.as_str()
+		})
+		.chain(config.packages.llvm.iter().map(|llvm| Packagelike::LLVM(llvm)));
 	let mut pkg_updates = if args.channels.is_empty() {
 		stream::iter(config_ver_iter)
-			.filter(|ver| build::rust::up_to_date(&repodir, &config, ver).map(|up_to_date| !up_to_date))
+			.filter(|pkg| pkg.is_up_to_date(&repodir, &config).map(|up_to_date| !up_to_date))
 			.collect::<BTreeSet<_>>()
 			.await
 	} else {
 		config_ver_iter
-			.filter(|channel| args.channels.iter().any(|ch| ch == channel))
+			.filter(|channel| args.channels.iter().any(|ch| ch == &channel.name()))
 			.collect::<BTreeSet<_>>()
 	};
-	args.ignore.iter().for_each(|channel| {
-		pkg_updates.remove(channel.as_str());
-	});
+	if !args.ignore.is_empty() {
+		let ignore = args.ignore.iter().map(|ignore| ignore.as_str()).collect::<BTreeSet<_>>();
+		pkg_updates = pkg_updates
+			.into_iter()
+			.filter(|pkg| {
+				let name: &str = &pkg.name();
+				!ignore.contains(name)
+			})
+			.collect();
+	}
 
 	// if everything is up to date, simply exit
 	if pkg_updates.is_empty() {
 		info!("Everything is up to date");
 		return;
 	}
-	let pkg_updates_str = pkg_updates.iter().join(", ");
+	let pkg_updates_str = pkg_updates.iter().map(|pkg| pkg.name()).join(", ");
 	info!("The following rust versions will be updated: {}", pkg_updates_str);
 
 	// connect to docker - create a server
@@ -229,26 +323,28 @@ async fn main() {
 	};
 
 	// update packages
-	for channel in pkg_updates {
+	for pkg in pkg_updates {
 		// build the package
-		if args.skip_rust_packages {
-			info!("Skipping rust packages for {}", channel)
+		if args.skip_rust_packages && matches!(pkg, Packagelike::Rust { .. }) {
+			info!("Skipping rust packages for {}", pkg.name())
 		} else {
-			if let Err(err) = build::rust::build_package(&repomount, &docker, &config, channel, jobs).await {
-				error!("Failed to build package: {}", err);
+			if let Err(err) = pkg.build_package(&repomount, &docker, &config, jobs).await {
+				error!("Failed to build package {}: {}", pkg.name(), err);
 				server.destroy().await.expect("Failed to destroy the server");
 
 				exit(1);
 			}
 		}
 
-		// test the package
-		if let Err(err) = build::rust::test_package(docker.clone(), &cidr_v6, &config, channel).await {
-			error!("Testing package failed: {}", err);
-			// TODO maybe upload the package somewhere for manual inspection
-			server.destroy().await.expect("Failed to destroy the server");
+		// test the package if it was a rust package
+		if let Packagelike::Rust { channel } = pkg {
+			if let Err(err) = build::rust::test_package(docker.clone(), &cidr_v6, &config, channel).await {
+				error!("Testing package failed: {}", err);
+				// TODO maybe upload the package somewhere for manual inspection
+				server.destroy().await.expect("Failed to destroy the server");
 
-			exit(1);
+				exit(1);
+			}
 		}
 
 		// upload the changes
@@ -260,14 +356,16 @@ async fn main() {
 			}
 		}
 
-		// build the docker images
-		if args.skip_rust_docker {
-			info!("Skipping rust docker images for {}", channel);
-		} else {
-			if let Err(err) = build::rust::build_and_upload_docker(&docker, &config, channel, args.upload_docker).await {
-				error!("Failed to build docker images: {}", err);
-				server.destroy().await.expect("Failed to destroy the server");
-				exit(1);
+		// build the docker images if it was a rust package
+		if let Packagelike::Rust { channel } = pkg {
+			if args.skip_rust_docker {
+				info!("Skipping rust docker images for {}", channel);
+			} else {
+				if let Err(err) = build::rust::build_and_upload_docker(&docker, &config, channel, args.upload_docker).await {
+					error!("Failed to build docker images: {}", err);
+					server.destroy().await.expect("Failed to destroy the server");
+					exit(1);
+				}
 			}
 		}
 	}
