@@ -111,7 +111,7 @@ steps:
     commands:
       - ping6 -c 5 drone.msrd0.eu
   
-  - name: restore-cache
+  - name: restore-build-cache
     image: meltwater/drone-cache:v1
     pull: always
     settings:
@@ -133,6 +133,20 @@ steps:
       - cargo -V
       - cargo build --release
   
+  - name: rebuild-build-cache
+    image: meltwater/drone-cache:v1
+    pull: always
+    settings:
+      backend: "filesystem"
+      rebuild: true
+      cache_key: '{{ .Repo.Name }}_release_{{ checksum "Cargo.lock" }}_{{ arch }}_{{ os }}'
+      archive_format: "gzip"
+      mount:
+        - "target"
+    volumes:
+      - name: cache
+        path: /tmp/cache
+  
   - name: secrets
     image: busybox
     pull: always
@@ -144,6 +158,20 @@ steps:
     commands:
       - echo "$$ABUILD_PUBKEY" >alpine@msrd0.de-5fc3c0b2.rsa.pub
       - echo "$$ABUILD_PRIVKEY" >alpine@msrd0.de-5fc3c0b2.rsa
+  
+  - name: restore-repo-cache
+    image: meltwater/drone-cache:v1
+    pull: always
+    settings:
+      backend: "filesystem"
+      restore: true
+      cache_key: '{{ .Repo.Name }}_cache'
+      archive_format: "gzip"
+      mount:
+        - "cache"
+    volumes:
+      - name: cache
+        path: /tmp/cache
   
   - name: run
     image: alpine
@@ -161,18 +189,18 @@ steps:
     commands:
       - apk add --no-cache ca-certificates git libgcc libgit2 libssh2 libressl
       - mkdir -p target/repo
-      - ./target/release/alpine-rust -c -u -d -m -p -r target/repo --cache target/cache -v --ignore beta
+      - ./target/release/alpine-rust -c -u -d -m -p -r cache/repo --cache cache/cache -v --ignore beta
   
-  - name: rebuild-cache
+  - name: rebuild-repo-cache
     image: meltwater/drone-cache:v1
     pull: always
     settings:
       backend: "filesystem"
       rebuild: true
-      cache_key: '{{ .Repo.Name }}_release_{{ checksum "Cargo.lock" }}_{{ arch }}_{{ os }}'
+      cache_key: '{{ .Repo.Name }}_cache'
       archive_format: "gzip"
       mount:
-        - "target"
+        - "cache"
     volumes:
       - name: cache
         path: /tmp/cache
