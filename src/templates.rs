@@ -163,7 +163,6 @@ impl Config {
 			llvmver: u32,
 			bootver: &'t str,
 			bootsys: bool,
-			sysver: Option<&'t str>,
 			python: Option<&'t str>,
 			sha512sums: &'t str
 		}
@@ -177,7 +176,6 @@ impl Config {
 			llvmver: rust.llvmver,
 			bootver: &rust.bootver,
 			bootsys: rust.bootsys,
-			sysver: rust.sysver.as_deref(),
 			python: rust.python.as_deref(),
 			sha512sums: &rust.sha512sums
 		}

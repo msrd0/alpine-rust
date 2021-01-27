@@ -3,11 +3,16 @@ FROM alpine:{{ alpine }}
 # install basic dependencies
 RUN apk add --no-cache alpine-sdk sudo
 
+# there's a regression in busybox 3.32 (alpine 3.13) and 3.33 (edge) that makes our pkgver invalid:
+# if _date is not set, `${_date+.${_date//-/}}` should evaluate empty, but evaluates to a slash (/)
+RUN echo "http://dl-cdn.alpinelinux.org/alpine/v3.12/main" >>/etc/apk/repositories \
+ && apk add --no-cache busybox~=1.31 \
+ && sed '$d' /etc/apk/repositories /
+
 {% if sysver.is_some() -%}
 {% let sysver = sysver.unwrap() -%}
 # enable old alpine repos so we can pull older rust versions
-RUN echo "@{{ sysver }} http://dl-cdn.alpinelinux.org/alpine/v{{ sysver }}/community" >>/etc/apk/repositories \
- && apk add --no-cache cargo@{{ sysver }} rust@{{ sysver }}
+RUN echo "http://dl-cdn.alpinelinux.org/alpine/v{{ sysver }}/community" >>/etc/apk/repositories 
 {%- endif %}
 
 # we will store the repository here
