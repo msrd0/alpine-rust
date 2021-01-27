@@ -7,7 +7,7 @@ RUN apk add --no-cache alpine-sdk sudo
 # if _date is not set, `${_date+.${_date//-/}}` should evaluate empty, but evaluates to a slash (/)
 RUN echo "http://dl-cdn.alpinelinux.org/alpine/v3.12/main" >>/etc/apk/repositories \
  && apk add --no-cache busybox~=1.31 \
- && sed '$d' /etc/apk/repositories /
+ && sed '$d' /etc/apk/repositories
 
 {% if sysver.is_some() -%}
 {% let sysver = sysver.unwrap() -%}
