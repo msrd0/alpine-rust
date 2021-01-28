@@ -330,8 +330,10 @@ async fn main() {
 		} else {
 			if let Err(err) = pkg.build_package(&repomount, &docker, &config, jobs).await {
 				error!("Failed to build package {}: {}", pkg.name(), err);
+				if let Err(err) = caddy.stop(&docker).await {
+					error!("Unable to stop caddy: {}", err);
+				}
 				server.destroy().await.expect("Failed to destroy the server");
-
 				exit(1);
 			}
 		}
@@ -341,8 +343,10 @@ async fn main() {
 			if let Err(err) = build::rust::test_package(docker.clone(), &cidr_v6, &config, channel).await {
 				error!("Testing package failed: {}", err);
 				// TODO maybe upload the package somewhere for manual inspection
+				if let Err(err) = caddy.stop(&docker).await {
+					error!("Unable to stop caddy: {}", err);
+				}
 				server.destroy().await.expect("Failed to destroy the server");
-
 				exit(1);
 			}
 		}
@@ -351,6 +355,9 @@ async fn main() {
 		if args.upload_packages {
 			if let Err(err) = server.upload_repo_changes(&config, &repodir).await {
 				error!("Failed to commit changes: {}", err);
+				if let Err(err) = caddy.stop(&docker).await {
+					error!("Unable to stop caddy: {}", err);
+				}
 				server.destroy().await.expect("Failed to destroy the server");
 				exit(1);
 			}
@@ -363,6 +370,9 @@ async fn main() {
 			} else {
 				if let Err(err) = build::rust::build_and_upload_docker(&docker, &config, channel, args.upload_docker).await {
 					error!("Failed to build docker images: {}", err);
+					if let Err(err) = caddy.stop(&docker).await {
+						error!("Unable to stop caddy: {}", err);
+					}
 					server.destroy().await.expect("Failed to destroy the server");
 					exit(1);
 				}

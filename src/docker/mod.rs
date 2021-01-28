@@ -1,5 +1,9 @@
 use anyhow::bail;
-use bollard::{container::LogsOptions, image::BuildImageOptions, Docker};
+use bollard::{
+	container::{LogsOptions, RemoveContainerOptions},
+	image::BuildImageOptions,
+	Docker
+};
 use futures_util::StreamExt;
 use serde::Serialize;
 use std::{hash::Hash, time::Duration};
@@ -98,5 +102,19 @@ pub async fn run_container_to_completion(docker: &Docker, container_id: &str) ->
 			container_id, exit_code
 		)));
 	}
+	Ok(())
+}
+
+pub async fn remove_container(docker: &Docker, container_id: &str) -> anyhow::Result<()> {
+	info!("Removing container {}", container_id);
+	docker
+		.remove_container(
+			container_id,
+			Some(RemoveContainerOptions {
+				v: true,
+				..Default::default()
+			})
+		)
+		.await?;
 	Ok(())
 }

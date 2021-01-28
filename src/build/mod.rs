@@ -1,4 +1,7 @@
-use crate::{docker::run_container_to_completion, Config};
+use crate::{
+	docker::{remove_container, run_container_to_completion},
+	Config
+};
 use bollard::{
 	container,
 	models::{HostConfig, Mount, MountTypeEnum},
@@ -56,5 +59,6 @@ async fn docker_run_abuild(docker: &Docker, img: &str, repomount: &str) -> anyho
 		.await?;
 	info!("Created container {}", container.id);
 
-	run_container_to_completion(docker, &container.id).await
+	run_container_to_completion(docker, &container.id).await?;
+	remove_container(docker, &container.id).await
 }
