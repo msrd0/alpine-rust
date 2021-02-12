@@ -116,13 +116,13 @@ a6df9e2d599806eeddbfb35f7dea976781533f63d369a765b8a304221281c9f9e642ff952978f69e
 fd39d2d86e56d4dd1ad3c044aec9f417b8fafedf954d3a53540bd138bec7632a450668e664b555ab632af084a000800e4fe4574abc8e6058299a4072115b272b  rustc-patches-1.47.tar.gz
 """
 
-# 1.48.0 - built using 1.47.0 from this repo
+# 1.48.0 - built using 1.47.0 from the official repos
 [rust.'1.48']
 pkgver = "1.48.0"
 pkgrel = 0
 llvmver = 11
-bootver = "1.47"
-bootsys = false
+bootver = "1.47.0"
+bootsys = true
 sha512sums = """
 e28e5f0813cfd94fb92399a2d64aa19bdf0933b5fc768ea10da2a5b787c94bac6a5efb98b2c3702da3d1c46c6766b157df3727e5845b4b83a237b44ec45b27ba  rustc-1.48.0-src.tar.gz
 d34f57f021ac06bfa924ffb28d561453e829f01c092e35be5b40601c9a8ae20c5f3db76267e42c55207a3c187efa25261ea20755cc00adc1297a7bcf5aec4ad1  rustc-patches-1.48.tar.gz
@@ -131,20 +131,20 @@ d34f57f021ac06bfa924ffb28d561453e829f01c092e35be5b40601c9a8ae20c5f3db76267e42c55
 # 1.49.0 - built using 1.48.0 from this repo
 [rust."1.49"]
 pkgver = "1.49.0"
-pkgrel = 0
+pkgrel = 1
 llvmver = 11
 bootver = "1.48"
 bootsys = false
 sha512sums = '''
 033aa9fb9b9a79055ee075c33c27ae40defe7430972057a6477829070b5f54f8fc5082d36f5c751a2fb4cdfcf0d83db7b879dee15a8c4229b517295d6b7b6896  rustc-1.49.0-src.tar.gz
-536264d678d6350ed2c723fb0b5e2e7245d379e0f03426d4fbdce4392a08aa1881a1706fdba2513a603a60a4348e2b545adf0c9b8c33e849af282796a8d143f7  rustc-patches-1.49.tar.gz
+6a697353c5279325927ebf2c70941ef4e7b19778b7b707f74b369918808dbb24f9b18939cf0121884c04ed47288eb473e272f453019fbfd4bbcebae7b505baff  rustc-patches-1.49.tar.gz
 '''
 
 [rust.stable]
 pkgver = "1.50.0"
 pkgrel = 0
 date = "2021-02-11"
-llvmver = 10
+llvmver = 11
 bootver = "1.49"
 bootsys = false
 sha512sums = '''
@@ -152,22 +152,10 @@ sha512sums = '''
 bc786b3f4ea2a1b41daa94c7e380981477063c869e6f0dd902a1f391b1bc0d78cdd26043617d93c9fb6d2e681958e65afdae5f9ea842c9fea5a65ffcaa21b627  1.50.tar.gz
 '''
 
-[rust.beta]
-pkgver = "1.50.0"
-pkgrel = 0
-date = "2021-01-21"
-llvmver = 11
-bootver = "stable"
-bootsys = false
-sha512sums = '''
-d9aae6db95a052e7b9b56abc9decb6b9a794e8c6c830d34d7861699f78ec60c17846d3aa511d36771c8f9ba9c6ad2da1daea81c5683702ef8c1e1efff5fb6fde  rustc-beta-src.tar.gz
-bc786b3f4ea2a1b41daa94c7e380981477063c869e6f0dd902a1f391b1bc0d78cdd26043617d93c9fb6d2e681958e65afdae5f9ea842c9fea5a65ffcaa21b627  rustc-patches-1.50.tar.gz
-'''
-
 [rust."1.50"]
 pkgver = "1.50.0"
 pkgrel = 0
-llvmver = 10
+llvmver = 11
 bootver = "1.49"
 bootsys = false
 sha512sums = '''

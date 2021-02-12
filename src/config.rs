@@ -281,7 +281,7 @@ pub async fn update_config(config_path: &PathBuf, cache_dir: Option<&PathBuf>) {
 			tbl["pkgver"] = value(pkgver.as_str());
 			tbl["pkgrel"] = value(0);
 			tbl["date"] = value(date);
-			tbl["llvmver"] = value(10);
+			tbl["llvmver"] = value(11);
 			tbl["bootver"] = value(bootver.as_str());
 			tbl["bootsys"] = value(false);
 			tbl["sha512sums"] = value(sha512sums.as_str());
