@@ -261,7 +261,7 @@ pub async fn update_config(config_path: &PathBuf, cache_dir: Option<&PathBuf>) {
 		let patches = get_hash_extract(cache_dir, &patches_url, src_path)
 			.await
 			.expect("Failed to download rust patches");
-		sha512sums += &format!("{:x}  1.{}.tar.gz\n", patches, minor);
+		sha512sums += &format!("{:x}  rustc-patches-1.{}.tar.gz\n", patches, minor);
 
 		test_patches(src_path, rustc_src_ver, major, minor)
 			.await
