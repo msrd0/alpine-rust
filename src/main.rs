@@ -272,8 +272,8 @@ async fn main() {
 	info!("The following rust versions will be updated: {}", pkg_updates_str);
 
 	// connect to docker - create a server
-	let server = if args.docker_local {
-		Either::Left(LocalServer::new())
+	let mut server = if args.docker_local {
+		Either::Left(LocalServer::new(&config, &repodir))
 	} else if args.docker_upcloud {
 		Either::Right(UpcloudServer::create(&config).await.expect("Failed to create UpCloud server"))
 	} else {

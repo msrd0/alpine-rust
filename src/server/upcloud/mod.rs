@@ -175,7 +175,7 @@ impl Server for UpcloudServer {
 		UPCLOUD_IPv6CIDR.to_owned()
 	}
 
-	async fn upload_repo_changes(&self, config: &Config, repodir: &Path) -> anyhow::Result<()> {
+	async fn upload_repo_changes(&mut self, config: &Config, repodir: &Path) -> anyhow::Result<()> {
 		// establish a new ssh session
 		let mut sess = connect(&self.domain, &self.password).await?;
 

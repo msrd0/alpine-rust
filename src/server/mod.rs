@@ -24,7 +24,7 @@ pub trait Server {
 	fn cidr_v6(&self) -> IPv6CIDR<String>;
 
 	/// Upload any changes made to the repodir.
-	async fn upload_repo_changes(&self, config: &Config, repodir: &Path) -> anyhow::Result<()>;
+	async fn upload_repo_changes(&mut self, config: &Config, repodir: &Path) -> anyhow::Result<()>;
 
 	/// Destroy the server if it was created previously.
 	async fn destroy(self) -> anyhow::Result<()>;
@@ -58,8 +58,8 @@ where
 		self.as_ref().either(A::cidr_v6, B::cidr_v6)
 	}
 
-	async fn upload_repo_changes(&self, config: &Config, repodir: &Path) -> anyhow::Result<()> {
-		self.as_ref()
+	async fn upload_repo_changes(&mut self, config: &Config, repodir: &Path) -> anyhow::Result<()> {
+		self.as_mut()
 			.either(
 				|a| a.upload_repo_changes(config, repodir),
 				|b| b.upload_repo_changes(config, repodir)
