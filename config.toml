@@ -141,15 +141,15 @@ sha512sums = '''
 '''
 
 [rust.stable]
-pkgver = "1.49.0"
+pkgver = "1.50.0"
 pkgrel = 0
-date = "2020-12-31"
-llvmver = 11
-bootver = "1.48"
+date = "2021-02-11"
+llvmver = 10
+bootver = "1.49"
 bootsys = false
 sha512sums = '''
-033aa9fb9b9a79055ee075c33c27ae40defe7430972057a6477829070b5f54f8fc5082d36f5c751a2fb4cdfcf0d83db7b879dee15a8c4229b517295d6b7b6896  rustc-1.49.0-src.tar.gz
-536264d678d6350ed2c723fb0b5e2e7245d379e0f03426d4fbdce4392a08aa1881a1706fdba2513a603a60a4348e2b545adf0c9b8c33e849af282796a8d143f7  rustc-patches-1.49.tar.gz
+30a8a64379427901fe9a23044897456f26e7f7ab146400464feeb663aeff7539c98d78ecbd6a446535a86c8740a6ece9edf19807dc28795b832a988722fe7990  rustc-1.50.0-src.tar.gz
+bc786b3f4ea2a1b41daa94c7e380981477063c869e6f0dd902a1f391b1bc0d78cdd26043617d93c9fb6d2e681958e65afdae5f9ea842c9fea5a65ffcaa21b627  1.50.tar.gz
 '''
 
 [rust.beta]
@@ -162,4 +162,15 @@ bootsys = false
 sha512sums = '''
 d9aae6db95a052e7b9b56abc9decb6b9a794e8c6c830d34d7861699f78ec60c17846d3aa511d36771c8f9ba9c6ad2da1daea81c5683702ef8c1e1efff5fb6fde  rustc-beta-src.tar.gz
 bc786b3f4ea2a1b41daa94c7e380981477063c869e6f0dd902a1f391b1bc0d78cdd26043617d93c9fb6d2e681958e65afdae5f9ea842c9fea5a65ffcaa21b627  rustc-patches-1.50.tar.gz
+'''
+
+[rust."1.50"]
+pkgver = "1.50.0"
+pkgrel = 0
+llvmver = 10
+bootver = "1.49"
+bootsys = false
+sha512sums = '''
+30a8a64379427901fe9a23044897456f26e7f7ab146400464feeb663aeff7539c98d78ecbd6a446535a86c8740a6ece9edf19807dc28795b832a988722fe7990  rustc-1.50.0-src.tar.gz
+bc786b3f4ea2a1b41daa94c7e380981477063c869e6f0dd902a1f391b1bc0d78cdd26043617d93c9fb6d2e681958e65afdae5f9ea842c9fea5a65ffcaa21b627  1.50.tar.gz
 '''
