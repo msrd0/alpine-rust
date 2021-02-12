@@ -3,10 +3,9 @@ use crate::{
 	docker::{local_ipv6_cidr, IPv6CIDR},
 	repo, Config
 };
-use anyhow::anyhow;
 use bollard::Docker;
 use inotify::{Inotify, WatchMask};
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 pub struct LocalServer {
 	inotify: Inotify
@@ -47,7 +46,7 @@ impl Server for LocalServer {
 		local_ipv6_cidr().expect("Failed to parse /etc/docker/daemon.json - Is your docker daemon IPv6-enabled?")
 	}
 
-	async fn upload_repo_changes(&mut self, config: &Config, _repodir: &Path) -> anyhow::Result<()> {
+	async fn upload_repo_changes(&mut self, config: &Config, repodir: &Path) -> anyhow::Result<()> {
 		let mut res: anyhow::Result<()> = Ok(());
 		let mut buf = [0u8; 4096];
 		loop {
@@ -65,13 +64,10 @@ impl Server for LocalServer {
 					}
 				};
 
-				let event_path: PathBuf = name.to_owned().into();
-				let file_name = event_path
-					.file_name()
-					.ok_or(anyhow!("{} does not have a filename", event_path.display()))?;
-				let key = format!("{}/alpine-rust/x86_64/{}", config.alpine.version, file_name.to_string_lossy());
-				if let Err(err) = repo::upload(&event_path, &key).await {
-					error!("Error uploading {}: {}", event_path.display(), err);
+				let key = format!("{}/alpine-rust/x86_64/{}", config.alpine.version, name.to_string_lossy());
+				let path = format!("{}/{}", repodir.display(), key);
+				if let Err(err) = repo::upload(&path, &key).await {
+					error!("Error uploading {}: {}", path, err);
 					res = Err(err);
 				}
 			}
