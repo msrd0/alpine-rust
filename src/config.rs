@@ -82,6 +82,57 @@ fn get(url: &str) -> impl Future<Output = reqwest::Result<reqwest::Response>> {
 		.send()
 }
 
+async fn check_patches_exist(version: &str) -> reqwest::Result<bool> {
+	#[derive(Deserialize)]
+	struct GitHubBranch {
+		name: String
+	}
+
+	let branches: Vec<GitHubBranch> = get("https://api.github.com/repos/msrd0/alpine-rust/branches")
+		.await?
+		.json()
+		.await?;
+	let branch_name = format!("patches/{}", version);
+	Ok(branches.iter().any(|branch| branch.name == branch_name))
+}
+
+fn copy_patches(version: &str, from: &str) -> anyhow::Result<()> {
+	let dir = tempdir()?;
+	let path = dir.path();
+
+	let script = format!(
+		r#"
+		git clone --branch patches/{from} https://drone-msrd0-eu:{GITHUB_TOKEN}@github.com/msrd0/alpine-rust.git {path}
+		cd {path}
+		git checkout -b patches/{version}
+		git mv patches-{from} patches-{version}
+		git commit -m "mv patches-{from} to patches-{version}"
+		git reset --soft HEAD~$(($(git rev-list --count HEAD)-1))
+		git commit --amend -m "copy patches for Rust {version} from Rust {from} at $(git rev-parse HEAD)"
+		git push https://drone-msrd0-eu:{GITHUB_TOKEN}@github.com/msrd0/alpine-rust.git patches/{version}
+		rm -rf {path}
+	"#,
+		GITHUB_TOKEN = GITHUB_TOKEN.as_str(),
+		path = path.display(),
+		version = version,
+		from = from
+	)
+	.trim()
+	.replace("\n", " && ");
+	let status = Command::new("/bin/busybox")
+		.args(&["ash", "-xo", "pipefail", "-c", &script])
+		.env("GIT_AUTHOR_NAME", "drone.msrd0.eu [bot]")
+		.env("GIT_AUTHOR_EMAIL", "noreply@drone.msrd0.eu")
+		.env("GIT_COMMITTER_NAME", "drone.msrd0.eu [bot]")
+		.env("GIT_COMMITTER_EMAIL", "noreply@drone.msrd0.eu")
+		.status()?;
+	if !status.success() {
+		bail!("Copying patches returned non-zero exit code {:?}", status.code());
+	}
+
+	Ok(())
+}
+
 async fn get_hash_extract(cache_dir: &PathBuf, url: &str, location: &Path) -> anyhow::Result<impl LowerHex> {
 	let mut hash = Sha512::new();
 	let tempfile = NamedTempFile::new()?;
@@ -235,6 +286,14 @@ pub async fn update_config(config_path: &PathBuf, cache_dir: Option<&PathBuf>) {
 
 		if !channel_needs_update && !version_needs_update {
 			continue;
+		}
+
+		if !check_patches_exist(&format!("{}.{}", major, minor))
+			.await
+			.expect("Failed to check patches")
+		{
+			copy_patches(&format!("{}.{}", major, minor), &format!("{}.{}", major, minor - 1))
+				.expect("Failed to copy patches");
 		}
 
 		let src_dir = tempdir().expect("Failed to create tempdir");
