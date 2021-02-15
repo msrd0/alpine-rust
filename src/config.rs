@@ -102,16 +102,17 @@ fn copy_patches(version: &str, from: &str) -> anyhow::Result<()> {
 
 	let script = format!(
 		r#"
-		git clone --branch patches/{from} https://drone-msrd0-eu:{GITHUB_TOKEN}@github.com/msrd0/alpine-rust.git {path}
-		cd {path}
-		git checkout -b patches/{version}
-		git mv patches-{from} patches-{version}
-		git commit -m "mv patches-{from} to patches-{version}"
-		git reset --soft HEAD~$(($(git rev-list --count HEAD)-1))
-		git commit --amend -m "copy patches for Rust {version} from Rust {from} at $(git rev-parse HEAD)"
-		git push https://drone-msrd0-eu:{GITHUB_TOKEN}@github.com/msrd0/alpine-rust.git patches/{version}
-		rm -rf {path}
-	"#,
+			export GIT_AUTHOR_NAME GIT_AUTHOR_EMAIL GIT_COMMITTER_NAME GIT_COMMITTER_EMAIL
+			git clone --branch patches/{from} https://drone-msrd0-eu:{GITHUB_TOKEN}@github.com/msrd0/alpine-rust.git {path}
+			cd {path}
+			git checkout -b patches/{version}
+			git mv patches-{from} patches-{version}
+			git commit -m "mv patches-{from} to patches-{version}"
+			git reset --soft HEAD~$(($(git rev-list --count HEAD)-1))
+			git commit --amend -m "copy patches for Rust {version} from Rust {from} at $(git rev-parse HEAD)"
+			git push https://drone-msrd0-eu:{GITHUB_TOKEN}@github.com/msrd0/alpine-rust.git patches/{version}
+			rm -rf {path}
+		"#,
 		GITHUB_TOKEN = GITHUB_TOKEN.as_str(),
 		path = path.display(),
 		version = version,
@@ -120,7 +121,7 @@ fn copy_patches(version: &str, from: &str) -> anyhow::Result<()> {
 	.trim()
 	.replace("\n", " && ");
 	let status = Command::new("/bin/busybox")
-		.args(&["ash", "-xo", "pipefail", "-c", &script])
+		.args(&["ash", "-uo", "pipefail", "-c", &script])
 		.env("GIT_AUTHOR_NAME", "drone.msrd0.eu [bot]")
 		.env("GIT_AUTHOR_EMAIL", "noreply@drone.msrd0.eu")
 		.env("GIT_COMMITTER_NAME", "drone.msrd0.eu [bot]")
