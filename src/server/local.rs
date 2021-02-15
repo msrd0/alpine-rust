@@ -65,9 +65,13 @@ impl Server for LocalServer {
 				};
 
 				let key = format!("{}/alpine-rust/x86_64/{}", config.alpine.version, name.to_string_lossy());
-				let path = format!("{}/{}", repodir.display(), key);
+				let path = repodir.join(&key);
+				if !path.exists() {
+					continue;
+				}
+
 				if let Err(err) = repo::upload(&path, &key).await {
-					error!("Error uploading {}: {}", path, err);
+					error!("Error uploading {}: {}", path.display(), err);
 					res = Err(err);
 				}
 			}
