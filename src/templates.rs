@@ -84,6 +84,32 @@ impl Config {
 		}
 	}
 
+	pub fn package_crate_apkbuild<'a>(&'a self, krate: &'a PackageCrate) -> impl Template + 'a {
+		#[derive(Template)]
+		#[template(path = "packages/crate.APKBUILD")]
+		struct CrateApkbuild<'t> {
+			crate_name: &'t str,
+			version: &'t str,
+			pkgrel: u32,
+			description: &'t str,
+			license: &'t str,
+			check: bool,
+			dependencies: &'t [String],
+			sha512sum: &'t str
+		}
+
+		CrateApkbuild {
+			crate_name: &krate.crate_name,
+			version: &krate.version,
+			pkgrel: krate.pkgrel,
+			description: &krate.description,
+			license: &krate.license,
+			check: krate.check,
+			dependencies: &krate.dependencies,
+			sha512sum: &krate.sha512sum
+		}
+	}
+
 	pub fn rust_dockerfile_abuild<'a>(&'a self, channel: &str, jobs: u16) -> impl Template + 'a {
 		#[derive(Template)]
 		#[template(path = "rust/abuild.Dockerfile")]

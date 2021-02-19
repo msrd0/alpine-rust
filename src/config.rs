@@ -20,6 +20,11 @@ use tokio::{
 };
 use toml_edit::{table, value, Document};
 
+// no, serde does not allow values to be used as default values
+fn bool_true() -> bool {
+	true
+}
+
 #[derive(Deserialize)]
 pub struct Config {
 	pub alpine: Alpine,
@@ -32,7 +37,9 @@ pub struct Config {
 #[derive(Default, Deserialize)]
 pub struct Packages {
 	#[serde(default)]
-	pub llvm: Vec<PackageLLVM>
+	pub llvm: Vec<PackageLLVM>,
+	#[serde(default, rename = "crate")]
+	pub crates: Vec<PackageCrate>
 }
 
 #[derive(Deserialize)]
@@ -41,6 +48,19 @@ pub struct PackageLLVM {
 	pub pkgrel: u32,
 	#[serde(default)]
 	pub paxmark: bool,
+	pub sha512sum: String
+}
+
+#[derive(Deserialize)]
+pub struct PackageCrate {
+	pub crate_name: String,
+	pub version: String,
+	pub pkgrel: u32,
+	pub description: String,
+	pub license: String,
+	#[serde(default = "bool_true")]
+	pub check: bool,
+	pub dependencies: Vec<String>,
 	pub sha512sum: String
 }
 

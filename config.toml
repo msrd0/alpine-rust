@@ -19,6 +19,16 @@ pkgver = "11.0.1"
 pkgrel = 1
 sha512sum = "b42c67ef88e09dd94171f85cdf49a421a15cfc82ff715c7ce6de22f98cefbe6c7cdf6bf4af7ca017d56ecf6aa3e36df3d823a78cf2dd5312de4301b54b43dbe8  llvm-11.0.1.src.tar.xz"
 
+[[packages.crate]]
+crate_name = "cargo-readme"
+version = "3.2.0"
+pkgrel = 0
+description = "A cargo subcommand to generate README.md content from doc comments"
+license = "MIT OR Apache-2.0"
+check = false
+dependencies = []
+sha512sum = "49fdfcde0913e330e4f79e56d41ff675e2a1b0d0e11b09d8b3db348e11fabe9024ec71eeef72465113e92aa49324b6d5ab5e7607e196d35730d4fe059feeb5e9  cargo-readme-3.2.0.tar.gz"
+
 # 1.40.0 - built using 1.39.0 from alpine-3.11
 [rust.'1.40']
 pkgver = "1.40.0"

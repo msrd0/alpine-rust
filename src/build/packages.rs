@@ -1,6 +1,6 @@
 use super::docker_run_abuild;
 use crate::{
-	config::{Config, PackageLLVM},
+	config::{Config, PackageCrate, PackageLLVM},
 	docker::{build_image, tar_header}
 };
 use askama::Template;
@@ -29,6 +29,22 @@ impl Package for PackageLLVM {
 
 	fn render_apkbuild(&self, config: &Config) -> Result<String, askama::Error> {
 		config.package_llvm_apkbuild(&self).render()
+	}
+}
+
+impl Package for PackageCrate {
+	fn pkgname(&self) -> String {
+		self.crate_name.replace("_", "-").to_lowercase()
+	}
+	fn pkgver(&self) -> &str {
+		&self.version
+	}
+	fn pkgrel(&self) -> u32 {
+		self.pkgrel
+	}
+
+	fn render_apkbuild(&self, config: &Config) -> Result<String, askama::Error> {
+		config.package_crate_apkbuild(&self).render()
 	}
 }
 

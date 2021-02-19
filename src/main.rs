@@ -114,7 +114,8 @@ struct Args {
 
 enum Packagelike<'a> {
 	LLVM(&'a PackageLLVM),
-	Rust { channel: &'a str }
+	Rust { channel: &'a str },
+	Crate(&'a PackageCrate)
 }
 
 impl<'a> PartialEq for Packagelike<'a> {
@@ -126,6 +127,10 @@ impl<'a> PartialEq for Packagelike<'a> {
 			},
 			Self::Rust { channel } => match other {
 				Self::Rust { channel: other_channel } => channel == other_channel,
+				_ => false
+			},
+			Self::Crate(krate) => match other {
+				Self::Crate(other_krate) => krate.crate_name == other_krate.crate_name,
 				_ => false
 			}
 		}
@@ -145,11 +150,18 @@ impl<'a> Ord for Packagelike<'a> {
 		match self {
 			Self::LLVM(llvm) => match other {
 				Self::LLVM(other_llvm) => llvm.pkgver.cmp(&other_llvm.pkgver),
-				Self::Rust { .. } => Ordering::Less
+				Self::Rust { .. } => Ordering::Less,
+				Self::Crate(_) => Ordering::Less
 			},
 			Self::Rust { channel } => match other {
 				Self::LLVM(_) => Ordering::Greater,
-				Self::Rust { channel: other_channel } => channel.cmp(other_channel)
+				Self::Rust { channel: other_channel } => channel.cmp(other_channel),
+				Self::Crate(_) => Ordering::Less
+			},
+			Self::Crate(krate) => match other {
+				Self::LLVM(_) => Ordering::Greater,
+				Self::Rust { .. } => Ordering::Greater,
+				Self::Crate(other_krate) => krate.crate_name.cmp(&other_krate.crate_name)
 			}
 		}
 	}
@@ -159,7 +171,8 @@ impl<'a> Packagelike<'a> {
 	fn name(&'a self) -> Cow<'a, str> {
 		match self {
 			Self::LLVM(llvm) => llvm.pkgname().into(),
-			Self::Rust { channel } => (*channel).into()
+			Self::Rust { channel } => (*channel).into(),
+			Self::Crate(krate) => krate.pkgname().into()
 		}
 	}
 
@@ -170,14 +183,16 @@ impl<'a> Packagelike<'a> {
 	{
 		match self {
 			Self::LLVM(llvm) => build::packages::up_to_date(repodir, config, *llvm).boxed(),
-			Self::Rust { channel } => build::rust::up_to_date(repodir, config, channel).boxed()
+			Self::Rust { channel } => build::rust::up_to_date(repodir, config, channel).boxed(),
+			Self::Crate(krate) => build::packages::up_to_date(repodir, config, *krate).boxed()
 		}
 	}
 
 	async fn build_package(&self, repomount: &str, docker: &Docker, config: &Config, jobs: u16) -> anyhow::Result<()> {
 		match self {
 			Self::LLVM(llvm) => build::packages::build_package(repomount, docker, config, *llvm, jobs).await,
-			Self::Rust { channel } => build::rust::build_package(repomount, docker, config, channel, jobs).await
+			Self::Rust { channel } => build::rust::build_package(repomount, docker, config, channel, jobs).await,
+			Self::Crate(krate) => build::packages::build_package(repomount, docker, config, *krate, jobs).await
 		}
 	}
 }
@@ -241,7 +256,8 @@ async fn main() {
 		.map(|channel| Packagelike::Rust {
 			channel: channel.as_str()
 		})
-		.chain(config.packages.llvm.iter().map(|llvm| Packagelike::LLVM(llvm)));
+		.chain(config.packages.llvm.iter().map(|llvm| Packagelike::LLVM(llvm)))
+		.chain(config.packages.crates.iter().map(|krate| Packagelike::Crate(krate)));
 	let mut pkg_updates = if args.channels.is_empty() {
 		stream::iter(config_ver_iter)
 			.filter(|pkg| pkg.is_up_to_date(&repodir, &config).map(|up_to_date| !up_to_date))
