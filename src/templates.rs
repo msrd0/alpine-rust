@@ -3,6 +3,8 @@ use askama::Template;
 use chrono::NaiveDate;
 use std::fmt::{self, Display};
 
+const GIT_COMMIT: &str = env!("GIT_COMMIT");
+
 struct Rustver {
 	rustminor: u32
 }
@@ -136,13 +138,15 @@ impl Config {
 		struct DockerfileDefault<'t> {
 			alpine: &'t str,
 			pubkey: &'t str,
-			channel: &'t str
+			channel: &'t str,
+			git_commit: &'t str
 		}
 
 		DockerfileDefault {
 			alpine: &self.alpine.version,
 			pubkey: &self.alpine.pubkey,
-			channel
+			channel,
+			git_commit: GIT_COMMIT
 		}
 	}
 
@@ -152,13 +156,15 @@ impl Config {
 		struct DockerfileMinimal<'t> {
 			alpine: &'t str,
 			pubkey: &'t str,
-			channel: &'t str
+			channel: &'t str,
+			git_commit: &'t str
 		}
 
 		DockerfileMinimal {
 			alpine: &self.alpine.version,
 			pubkey: &self.alpine.pubkey,
-			channel
+			channel,
+			git_commit: GIT_COMMIT
 		}
 	}
 

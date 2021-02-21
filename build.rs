@@ -1,12 +1,17 @@
 use std::{
 	fs::{read_dir, File},
 	io::Write,
-	path::{Path, PathBuf}
+	path::{Path, PathBuf},
+	process::Command
 };
 use tar::Builder;
 
 fn main() {
 	println!("cargo:rerun-if-changed=build.rs");
+
+	let output = Command::new("git").args(&["rev-parse", "HEAD"]).output().unwrap();
+	let git_commit = String::from_utf8(output.stdout).unwrap();
+	println!("cargo:rustc-env=GIT_COMMIT={}", git_commit);
 
 	let out_dir: PathBuf = std::env::var("OUT_DIR").unwrap().into();
 	let archive_path = out_dir.join("simple-compiler-test.tar");
