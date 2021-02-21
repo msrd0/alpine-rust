@@ -195,6 +195,14 @@ impl<'a> Packagelike<'a> {
 			Self::Crate(krate) => build::packages::build_package(repomount, docker, config, *krate, jobs).await
 		}
 	}
+
+	async fn build_and_upload_docker(&self, docker: &Docker, config: &Config, upload_docker: bool) -> anyhow::Result<()> {
+		match self {
+			Self::LLVM(llvm) => build::packages::build_and_upload_docker(docker, config, *llvm, upload_docker).await,
+			Self::Rust { channel } => build::rust::build_and_upload_docker(docker, config, channel, upload_docker).await,
+			Self::Crate(krate) => build::packages::build_and_upload_docker(docker, config, *krate, upload_docker).await
+		}
+	}
 }
 
 #[tokio::main]
@@ -380,18 +388,16 @@ async fn main() {
 		}
 
 		// build the docker images if it was a rust package
-		if let Packagelike::Rust { channel } = pkg {
-			if args.skip_rust_docker {
-				info!("Skipping rust docker images for {}", channel);
-			} else {
-				if let Err(err) = build::rust::build_and_upload_docker(&docker, &config, channel, args.upload_docker).await {
-					error!("Failed to build docker images: {}", err);
-					if let Err(err) = caddy.stop(&docker).await {
-						error!("Unable to stop caddy: {}", err);
-					}
-					server.destroy().await.expect("Failed to destroy the server");
-					exit(1);
+		if args.skip_rust_docker {
+			info!("Skipping rust docker images for {}", pkg.name());
+		} else {
+			if let Err(err) = pkg.build_and_upload_docker(&docker, &config, args.upload_docker).await {
+				error!("Failed to build docker images: {}", err);
+				if let Err(err) = caddy.stop(&docker).await {
+					error!("Unable to stop caddy: {}", err);
 				}
+				server.destroy().await.expect("Failed to destroy the server");
+				exit(1);
 			}
 		}
 	}

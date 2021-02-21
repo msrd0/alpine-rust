@@ -1,12 +1,11 @@
 use super::docker_run_abuild;
 use crate::{
-	docker::{build_image, run_container_to_completion, tar_header, IPv6CIDR},
-	Config, GITHUB_TOKEN
+	docker::{build_image, docker_push, run_container_to_completion, tar_header, IPv6CIDR},
+	Config
 };
 use anyhow::anyhow;
 use askama::Template;
-use bollard::{auth::DockerCredentials, container, image::BuildImageOptions, Docker};
-use futures_util::StreamExt;
+use bollard::{container, image::BuildImageOptions, Docker};
 use std::{io::Cursor, path::Path, process::exit, sync::Arc};
 use tokio::{
 	fs::{self, File},
@@ -165,29 +164,6 @@ async fn docker_build_dockerfile(
 	)
 	.await?;
 	info!("Built Docker image {}", tag);
-	Ok(())
-}
-
-async fn docker_push(docker: &Docker, tag: &str) -> anyhow::Result<()> {
-	info!("Pushing Docker image {}", tag);
-	let mut push_stream = docker.push_image::<String>(
-		&tag,
-		None,
-		Some(DockerCredentials {
-			username: Some("drone-msrd0-eu".to_owned()),
-			password: Some(GITHUB_TOKEN.clone()),
-			..Default::default()
-		})
-	);
-
-	while let Some(info) = push_stream.next().await {
-		let info = info?;
-		if let Some(err) = info.error {
-			println!("{}", err);
-			return Err(anyhow::Error::msg(format!("Failed to push docker image {}", tag)));
-		}
-	}
-	info!("Pushed Docker image {}", tag);
 	Ok(())
 }
 

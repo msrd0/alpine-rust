@@ -1,5 +1,7 @@
+use crate::GITHUB_TOKEN;
 use anyhow::bail;
 use bollard::{
+	auth::DockerCredentials,
 	container::{LogsOptions, RemoveContainerOptions},
 	image::BuildImageOptions,
 	Docker
@@ -116,5 +118,28 @@ pub async fn remove_container(docker: &Docker, container_id: &str) -> anyhow::Re
 			})
 		)
 		.await?;
+	Ok(())
+}
+
+pub async fn docker_push(docker: &Docker, tag: &str) -> anyhow::Result<()> {
+	info!("Pushing Docker image {}", tag);
+	let mut push_stream = docker.push_image::<String>(
+		&tag,
+		None,
+		Some(DockerCredentials {
+			username: Some("drone-msrd0-eu".to_owned()),
+			password: Some(GITHUB_TOKEN.clone()),
+			..Default::default()
+		})
+	);
+
+	while let Some(info) = push_stream.next().await {
+		let info = info?;
+		if let Some(err) = info.error {
+			println!("{}", err);
+			return Err(anyhow::Error::msg(format!("Failed to push docker image {}", tag)));
+		}
+	}
+	info!("Pushed Docker image {}", tag);
 	Ok(())
 }

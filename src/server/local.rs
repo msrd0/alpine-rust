@@ -57,6 +57,10 @@ impl Server for LocalServer {
 
 			for event in events {
 				let name = match event.name {
+					Some(name) if name.to_str().map_or(false, |name| name.starts_with(".")) => {
+						debug!("Skipping inotify event for hidden file {}", name.to_string_lossy());
+						continue;
+					},
 					Some(name) => name,
 					None => {
 						warn!("Skipping inotify event with no attached file name");

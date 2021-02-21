@@ -42,7 +42,7 @@ pub struct Packages {
 	pub crates: Vec<PackageCrate>
 }
 
-#[derive(Deserialize)]
+#[derive(Debug, Deserialize)]
 pub struct PackageLLVM {
 	pub pkgver: String,
 	pub pkgrel: u32,
@@ -51,7 +51,7 @@ pub struct PackageLLVM {
 	pub sha512sum: String
 }
 
-#[derive(Deserialize)]
+#[derive(Debug, Deserialize)]
 pub struct PackageCrate {
 	pub crate_name: String,
 	pub version: String,

@@ -1,4 +1,4 @@
-use crate::{config::*, docker::IPv6CIDR};
+use crate::{build::packages::Package, config::*, docker::IPv6CIDR};
 use askama::Template;
 use chrono::NaiveDate;
 use std::fmt::{self, Display};
@@ -109,6 +109,26 @@ impl Config {
 			check: krate.check,
 			dependencies: &krate.dependencies,
 			sha512sum: &krate.sha512sum
+		}
+	}
+
+	pub fn package_crate_dockerfile<'a>(&'a self, krate: &'a PackageCrate) -> impl Template + 'a {
+		#[derive(Template)]
+		#[template(path = "packages/crate.Dockerfile")]
+		struct CrateDockerfile<'t> {
+			alpine: &'t str,
+			pubkey: &'t str,
+			crate_name: &'t str,
+			pkgname: String,
+			git_commit: &'t str
+		}
+
+		CrateDockerfile {
+			alpine: &self.alpine.version,
+			pubkey: &self.alpine.pubkey,
+			crate_name: &krate.crate_name,
+			pkgname: krate.pkgname(),
+			git_commit: GIT_COMMIT
 		}
 	}
 
